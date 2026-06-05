@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "NetraX",
+    "slug": "netrax2",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.nhai.netrax"
+    },
+    "android": {
+      "package": "com.nhai.netrax",
+      "adaptiveIcon": {
+        "backgroundColor": "#020817",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreML": false,
+          "enableGpu": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NetraX requires camera access for face recognition"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "921997c9-1652-4605-9c0b-8b5a44c92e52"
+      }
+    },
+    "owner": "darshangg"
+  }
+}
