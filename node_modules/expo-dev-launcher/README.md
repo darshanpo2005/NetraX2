@@ -1,6 +1,6 @@
 # expo-dev-launcher
 
-`expo-dev-launcher` is an npm package installable in any Expo or React Native project. Once installed, any Debug builds of your application will gain the ability to load projects from Expo CLI. Release builds of your application will not change other than the addition of a few header files. This package is intended to be included in your project through [`expo-dev-client`](https://docs.expo.dev/clients/introduction/).
+`expo-dev-launcher` is an npm package installable in any Expo or React Native project. Once installed, any Debug builds of your application will gain the ability to load projects from Expo CLI. Release builds of your application will not change other than the addition of a few header files. This package is intended to be included in your project through [`expo-dev-client`](https://docs.expo.dev/versions/latest/sdk/dev-client/).
 
 ## Documentation
 
@@ -11,20 +11,6 @@ You can find more information in the [Expo documentation](https://docs.expo.dev/
 The `expo-dev-launcher` repository consists of two different parts, the exported package, which includes the native functions, located in the `android`, `ios` and `src` folders and the Dev Launcher interface, located under the `bundle` folder.
 
 Local development is usually done through `bare-expo`.
-
-To use `dev-client` when running `bare-expo` on Android, open [MainApplication.kt](/apps/bare-expo/android/app/src/main/java/dev/expo/payments/MainApplication.kt) and set the `USE_DEV_CLIENT` value to `true`.
-
-```diff
-- private const val USE_DEV_CLIENT = false;
-+ private const val USE_DEV_CLIENT = true;
-```
-
-To use `dev-client` when running `bare-expo` on iOS, open [AppDelegate.mm](/apps/bare-expo/ios/BareExpo/AppDelegate.mm) and set the `USE_DEV_CLIENT` value to `YES`.
-
-```diff
-- BOOL useDevClient = NO;
-+ BOOL useDevClient = YES;
-```
 
 ### Making JavaScript changes inside the `bundle` folder
 

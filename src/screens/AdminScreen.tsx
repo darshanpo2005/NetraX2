@@ -94,7 +94,7 @@ export default function AdminScreen() {
         <View style={styles.modelHeader}>
           <Text style={styles.modelIcon}>🧠</Text>
           <View>
-            <Text style={styles.modelName}>MobileFaceNet + CosFace</Text>
+            <Text style={styles.modelName}>w600k MobileFaceNet</Text>
             <Text style={styles.modelSub}>INT8 Quantized · TFLite</Text>
           </View>
         </View>
@@ -104,8 +104,8 @@ export default function AdminScreen() {
             ['Loss Function', 'CosFace (s=32)'],
             ['Dataset', 'LFW + Indian Aug.'],
             ['Parameters', '1.01M'],
-            ['Embedding', '128-dim'],
-            ['Threshold', '0.25 cosine'],
+            ['Embedding', '512-d'],
+            ['Threshold', '0.60 cosine'],
           ].map(([k, v]) => (
             <View key={k} style={styles.modelRow}>
               <Text style={styles.modelKey}>{k}</Text>

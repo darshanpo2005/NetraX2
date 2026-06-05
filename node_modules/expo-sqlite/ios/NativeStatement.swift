@@ -5,6 +5,8 @@ import ExpoModulesCore
 final class NativeStatement: SharedObject, Equatable {
   var pointer: OpaquePointer?
   var isFinalized = false
+  var extraPointer: OpaquePointer?
+  internal let lock = DispatchSemaphore(value: 1)
 
   // MARK: - Equatable
 

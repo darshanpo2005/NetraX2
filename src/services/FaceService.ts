@@ -15,7 +15,7 @@ export const l2Normalize = (embedding: number[]): number[] => {
 };
 
 // Validated threshold from offline evaluation (cosine similarity)
-export const COSINE_THRESHOLD = 0.25;
+export const COSINE_THRESHOLD = 0.60;
 
 export interface MatchResult {
   matched: boolean;

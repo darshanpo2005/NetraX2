@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
 import { syncAndPurge, isOnline } from '../services/SyncService';
+import { getModelInfo } from '../services/TFLiteService';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +33,11 @@ export default function HomeScreen({ navigation }: any) {
     setRefreshing(true);
     await loadStats();
     setRefreshing(false);
+  };
+
+  const handleTestModel = async () => {
+    const info = await getModelInfo();
+    Alert.alert('Model Test', info);
   };
 
   const handleSync = async () => {
@@ -151,6 +157,15 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       )}
 
+      {/* Test Model Button */}
+      <TouchableOpacity style={styles.testModelBtn} onPress={handleTestModel} activeOpacity={0.8}>
+        <Text style={styles.testModelIcon}>🧠</Text>
+        <View>
+          <Text style={styles.testModelTitle}>Test TFLite Model</Text>
+          <Text style={styles.testModelSub}>Verify MobileFaceNet is loaded</Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>All data encrypted on-device  ·  Zero network dependency</Text>
@@ -199,6 +214,10 @@ const styles = StyleSheet.create({
   offlineIcon  : { fontSize: 28 },
   offlineTitle : { color: '#94a3b8', fontSize: 15, fontWeight: '700' },
   offlineSub   : { color: '#475569', fontSize: 12, marginTop: 2 },
+  testModelBtn  : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(124,58,237,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)', marginBottom: 12 },
+  testModelIcon : { fontSize: 28 },
+  testModelTitle: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
+  testModelSub  : { color: '#475569', fontSize: 12, marginTop: 2 },
   footer       : { alignItems: 'center', marginTop: 8 },
   footerText   : { color: '#1e293b', fontSize: 11, letterSpacing: 0.5 },
 });

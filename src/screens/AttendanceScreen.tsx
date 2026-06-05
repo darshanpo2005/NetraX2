@@ -37,7 +37,7 @@ export default function AttendanceScreen({ navigation }: any) {
   });
 
   const cameraRef = useRef<Camera>(null);
-  const timerRef  = useRef<ReturnType<typeof setInterval>>();
+  const timerRef  = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');

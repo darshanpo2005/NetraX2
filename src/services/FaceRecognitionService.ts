@@ -112,15 +112,6 @@ function decodePngToRgb(base64: string): Uint8Array | null {
   return rgb;
 }
 
-// ─── INT8 normalization ───────────────────────────────────────────────────────
-// MobileFaceNet INT8 quantization: zero_point=128, scale=1/128
-// Maps [0,255] → [-128,127]  via  int8 = uint8 − 128
-function rgbToInt8(rgb: Uint8Array): Int8Array {
-  const out = new Int8Array(rgb.length);
-  for (let i = 0; i < rgb.length; i++) out[i] = (rgb[i] - 128) as number;
-  return out;
-}
-
 // ─── Safe face crop helper ────────────────────────────────────────────────────
 function safeCrop(
   frame: { left: number; top: number; width: number; height: number },
@@ -180,19 +171,20 @@ export const extractFaceEmbedding = async (
       return { success: false, embedding: null, faceDetected: true, error: 'PNG decode failed' };
     }
 
-    // ── 5. Normalize to INT8 input tensor [1, 112, 112, 3] ───────────────
-    const inputTensor = rgbToInt8(rgb);
+    // ── 5. Normalize to float32 input tensor [1, 112, 112, 3] ────────────
+    const inputTensor = new Float32Array(rgb.length);
+    for (let i = 0; i < rgb.length; i++) inputTensor[i] = rgb[i] / 127.5 - 1.0;
 
     // ── 6. TFLite inference ───────────────────────────────────────────────
     const model   = await loadFaceModel();
     const outputs = model.runSync([inputTensor]);
 
-    // ── 7. Extract float32 [128] embedding and L2-normalize ───────────────
+    // ── 7. Extract float32 [512] embedding and L2-normalize ───────────────
     const rawEmb = outputs[0] as Float32Array;
-    if (!rawEmb || rawEmb.length !== 128) {
+    if (!rawEmb || rawEmb.length !== 512) {
       return {
         success: false, embedding: null, faceDetected: true,
-        error: `Unexpected output length ${rawEmb?.length ?? 0} (expected 128)`,
+        error: `Unexpected output length ${rawEmb?.length ?? 0} (expected 512)`,
       };
     }
 
