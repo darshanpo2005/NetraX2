@@ -12,7 +12,7 @@ import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
 const CHALLENGE = { text: 'Blink your eyes', emoji: '😉', instruction: 'Slowly blink both eyes once' };
 
-const LIVENESS_SECS = 10;
+const LIVENESS_SECS = 12;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
 type ResultType = {
@@ -36,6 +36,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const eyesWereOpenRef      = useRef(false);
+  const minEyeSeenRef        = useRef(1.0);   // lowest eye value recorded since arming
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
@@ -156,18 +157,27 @@ export default function AttendanceScreen({ navigation }: any) {
       setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
       const minEye = Math.min(leftEye, rightEye);
-      if (minEye > 0.6) eyesWereOpenRef.current = true;
 
-      if (eyesWereOpenRef.current && minEye < 0.5) {
-        livenessPassedRef.current = true;
-        setLivenessPassed(true);
-        setLiveFeedback('✓ Blink detected!');
-        stopAllIntervalsRef.current();
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => handleRecognitionRef.current(), 600);
+      if (minEye > 0.7) {
+        eyesWereOpenRef.current = true;
+        minEyeSeenRef.current   = 1.0; // reset minimum on each clear-open frame
+      }
+
+      if (eyesWereOpenRef.current) {
+        minEyeSeenRef.current = Math.min(minEyeSeenRef.current, minEye);
+        if (minEyeSeenRef.current < 0.6) {
+          livenessPassedRef.current = true;
+          setLivenessPassed(true);
+          setLiveFeedback('✓ Blink detected!');
+          stopAllIntervalsRef.current();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => handleRecognitionRef.current(), 600);
+        } else {
+          setLiveFeedback('Blink slowly once');
+        }
       } else {
-        setLiveFeedback('Now blink your eyes!');
+        setLiveFeedback('Blink slowly once');
       }
     } catch {
       // silently skip failed captures
@@ -189,7 +199,7 @@ export default function AttendanceScreen({ navigation }: any) {
           setResult({
             type   : 'liveness_fail',
             message: 'Liveness Check Failed',
-            detail : 'Please try again and complete the challenge within 10 seconds.',
+            detail : 'Please try again and complete the challenge within 12 seconds.',
           });
           setStep('result');
         }
