@@ -159,14 +159,14 @@ export default function AttendanceScreen({ navigation }: any) {
 
       const minEye = Math.min(leftEye, rightEye);
 
-      if (minEye > 0.7) {
+      if (minEye > 0.5) {
         eyesWereOpenRef.current = true;
         minEyeSeenRef.current   = 1.0; // reset minimum on each clear-open frame
       }
 
       if (eyesWereOpenRef.current) {
         minEyeSeenRef.current = Math.min(minEyeSeenRef.current, minEye);
-        if (minEyeSeenRef.current < 0.65) {
+        if (minEyeSeenRef.current < 0.25) {
           livenessPassedRef.current = true;
           setLivenessPassed(true);
           setLiveFeedback('✓ Blink detected!');
