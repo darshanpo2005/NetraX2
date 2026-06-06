@@ -6,7 +6,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { getAttendanceRecords, AttendanceRecord } from '../services/DatabaseService';
+import * as Print from 'expo-print';
+import { getAttendanceWithWorkers, AttendanceRow } from '../services/DatabaseService';
 
 type Filter = 'today' | 'week' | 'month' | 'all';
 
@@ -17,195 +18,301 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all',   label: 'All Time'   },
 ];
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function groupByDate(records: AttendanceRecord[]): { date: string; items: AttendanceRecord[] }[] {
-  const map: Record<string, AttendanceRecord[]> = {};
-  for (const r of records) {
-    const d = formatDate(r.timestamp);
-    if (!map[d]) map[d] = [];
-    map[d].push(r);
+function groupByDate(rows: AttendanceRow[]): { date: string; items: AttendanceRow[] }[] {
+  const map: Record<string, AttendanceRow[]> = {};
+  for (const r of rows) {
+    if (!map[r.date]) map[r.date] = [];
+    map[r.date].push(r);
   }
   return Object.entries(map).map(([date, items]) => ({ date, items }));
 }
 
-function workerTotals(records: AttendanceRecord[]): { name: string; employeeId: string; count: number }[] {
+function workerTotals(rows: AttendanceRow[]): { name: string; employeeId: string; count: number }[] {
   const map: Record<string, { name: string; employeeId: string; count: number }> = {};
-  for (const r of records) {
-    if (!map[r.workerId]) map[r.workerId] = { name: r.workerName, employeeId: r.employeeId, count: 0 };
-    map[r.workerId].count++;
+  for (const r of rows) {
+    const key = r.employeeId || r.workerName;
+    if (!map[key]) map[key] = { name: r.workerName, employeeId: r.employeeId, count: 0 };
+    map[key].count++;
   }
   return Object.values(map).sort((a, b) => b.count - a.count);
 }
 
-function buildCSV(records: AttendanceRecord[]): string {
-  const header = 'Name,Employee ID,Date,Time,Location,Match %';
-  const rows = records.map(r =>
-    [
-      `"${r.workerName}"`,
-      `"${r.employeeId}"`,
-      `"${formatDate(r.timestamp)}"`,
-      `"${formatTime(r.timestamp)}"`,
-      `"${r.location}"`,
-      `"${(r.similarity * 100).toFixed(1)}%"`,
-    ].join(',')
+// ─── CSV ─────────────────────────────────────────────────────────────────────
+
+function buildCSV(rows: AttendanceRow[]): string {
+  const header = 'Name,Employee ID,Date,Time,Day';
+  const lines  = rows.map(r =>
+    [`"${r.workerName}"`, `"${r.employeeId}"`, `"${r.date}"`, `"${r.time}"`, `"${r.day}"`].join(',')
   );
-  return [header, ...rows].join('\n');
+  return [header, ...lines].join('\n');
 }
 
+// ─── PDF HTML ─────────────────────────────────────────────────────────────────
+
+function buildPdfHtml(rows: AttendanceRow[], filterLabel: string): string {
+  const uniqueWorkers = new Set(rows.map(r => r.employeeId || r.workerName)).size;
+  const dateRange     = rows.length
+    ? `${rows[rows.length - 1].date} – ${rows[0].date}`
+    : '—';
+  const tableRows = rows.map((r, i) => `
+    <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
+      <td>${r.workerName}</td>
+      <td>${r.employeeId || '—'}</td>
+      <td>${r.date}</td>
+      <td>${r.time}</td>
+      <td>${r.day}</td>
+    </tr>`).join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1e293b; padding: 32px; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; border-bottom: 2px solid #2563eb; padding-bottom: 16px; }
+  .brand  { font-size: 26px; font-weight: 800; color: #1d4ed8; letter-spacing: -0.5px; }
+  .brand span { color: #64748b; font-size: 14px; font-weight: 400; display: block; margin-top: 2px; }
+  .stats  { display: flex; gap: 24px; margin-bottom: 24px; }
+  .stat   { background: #f1f5f9; border-radius: 10px; padding: 14px 20px; flex: 1; }
+  .stat-n { font-size: 28px; font-weight: 800; color: #2563eb; }
+  .stat-l { font-size: 12px; color: #64748b; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  table   { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr{ background: #1d4ed8; color: #fff; }
+  th, td  { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+  th      { font-weight: 700; letter-spacing: 0.4px; }
+  .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">NetraX <span>Attendance Report — ${filterLabel}</span></div>
+    </div>
+    <div style="font-size:12px;color:#64748b">Generated: ${new Date().toLocaleString('en-IN')}</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n">${rows.length}</div><div class="stat-l">Total Records</div></div>
+    <div class="stat"><div class="stat-n">${uniqueWorkers}</div><div class="stat-l">Unique Workers</div></div>
+    <div class="stat" style="flex:2"><div class="stat-n" style="font-size:18px">${dateRange}</div><div class="stat-l">Date Range</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Employee ID</th><th>Date</th><th>Time</th><th>Day</th></tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <div class="footer">Generated by NetraX 2.0 · Face Recognition Attendance System</div>
+</body>
+</html>`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function AttendanceReportScreen() {
-  const [filter, setFilter]     = useState<Filter>('today');
-  const [records, setRecords]   = useState<AttendanceRecord[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [filter, setFilter]   = useState<Filter>('today');
+  const [rows, setRows]       = useState<AttendanceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy]       = useState<'csv' | 'pdf' | 'xls' | null>(null);
 
   const load = useCallback(async (f: Filter) => {
     setLoading(true);
-    try {
-      setRecords(await getAttendanceRecords(f));
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    } finally {
-      setLoading(false);
-    }
+    try { setRows(await getAttendanceWithWorkers(f)); }
+    catch (e: any) { Alert.alert('Error', e.message); }
+    finally { setLoading(false); }
   }, []);
 
   useFocusEffect(useCallback(() => { load(filter); }, [filter]));
 
-  const handleFilterChange = (f: Filter) => {
-    setFilter(f);
-    load(f);
+  const filterLabel = FILTERS.find(f => f.key === filter)?.label ?? filter;
+  const slugLabel   = filterLabel.replace(/\s+/g, '_');
+
+  const shareFile = async (uri: string, mimeType: string, title: string) => {
+    const ok = await Sharing.isAvailableAsync();
+    if (!ok) { Alert.alert('Sharing unavailable', 'File saved to documents.'); return; }
+    await Sharing.shareAsync(uri, { mimeType, dialogTitle: title });
   };
 
-  const handleExport = async () => {
-    if (!records.length) { Alert.alert('No Data', 'No records to export.'); return; }
-    setExporting(true);
+  const handleCSV = async () => {
+    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    setBusy('csv');
     try {
-      const csv     = buildCSV(records);
-      const label   = FILTERS.find(f => f.key === filter)?.label.replace(' ', '_') ?? filter;
-      const name    = `attendance_${label}_${Date.now()}.csv`;
-      const fileUri = (FileSystem.documentDirectory ?? '') + name;
-      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Attendance Report' });
-    } catch (e: any) {
-      Alert.alert('Export Failed', e.message);
-    } finally {
-      setExporting(false);
-    }
+      const uri = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.csv`;
+      await FileSystem.writeAsStringAsync(uri, buildCSV(rows), { encoding: FileSystem.EncodingType.UTF8 });
+      await shareFile(uri, 'text/csv', 'Export Attendance CSV');
+    } catch (e: any) { Alert.alert('Export Failed', e.message); }
+    finally { setBusy(null); }
   };
 
-  const groups  = groupByDate(records);
-  const totals  = workerTotals(records);
+  const handlePDF = async () => {
+    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    setBusy('pdf');
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildPdfHtml(rows, filterLabel) });
+      const dest    = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.pdf`;
+      await FileSystem.moveAsync({ from: uri, to: dest });
+      await shareFile(dest, 'application/pdf', 'Export Attendance PDF');
+    } catch (e: any) { Alert.alert('Export Failed', e.message); }
+    finally { setBusy(null); }
+  };
+
+  const handleXLS = async () => {
+    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    setBusy('xls');
+    try {
+      // CSV with .xls extension — opens natively in Excel and Google Sheets
+      const uri = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.xls`;
+      await FileSystem.writeAsStringAsync(uri, buildCSV(rows), { encoding: FileSystem.EncodingType.UTF8 });
+      await shareFile(uri, 'application/vnd.ms-excel', 'Export Attendance XLS');
+    } catch (e: any) { Alert.alert('Export Failed', e.message); }
+    finally { setBusy(null); }
+  };
+
+  const groups = groupByDate(rows);
+  const totals = workerTotals(rows);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.orb1} /><View style={styles.orb2} />
+    <View style={styles.root}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.orb1} /><View style={styles.orb2} />
 
-      {/* Filter tabs */}
-      <View style={styles.filterRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.filterTab, filter === f.key && styles.filterTabActive]}
-            onPress={() => handleFilterChange(f.key)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterTabText, filter === f.key && styles.filterTabTextActive]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Summary bar */}
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryCount}>{records.length}</Text>
-        <Text style={styles.summaryLabel}>total records</Text>
-        <TouchableOpacity
-          style={[styles.exportBtn, exporting && { opacity: 0.6 }]}
-          onPress={handleExport}
-          disabled={exporting}
-          activeOpacity={0.8}
-        >
-          {exporting
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.exportBtnText}>Export CSV</Text>
-          }
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 60 }} />
-      ) : records.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyText}>No attendance records</Text>
-          <Text style={styles.emptySubText}>Records will appear here after face scans</Text>
+        {/* Filter tabs */}
+        <View style={styles.filterRow}>
+          {FILTERS.map(f => (
+            <TouchableOpacity
+              key={f.key}
+              style={[styles.filterTab, filter === f.key && styles.filterTabActive]}
+              onPress={() => { setFilter(f.key); load(f.key); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterTabText, filter === f.key && styles.filterTabTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      ) : (
-        <>
-          {/* Per-worker totals */}
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionLine} />
-            <Text style={styles.sectionTitle}>BY WORKER</Text>
-            <View style={styles.sectionLine} />
-          </View>
-          <View style={styles.totalsCard}>
-            {totals.map((t, i) => (
-              <View key={t.employeeId + i} style={[styles.totalRow, i < totals.length - 1 && styles.totalRowBorder]}>
-                <View style={styles.totalLeft}>
-                  <Text style={styles.totalName}>{t.name}</Text>
-                  <Text style={styles.totalEmpId}>{t.employeeId || '—'}</Text>
-                </View>
-                <View style={styles.totalBadge}>
-                  <Text style={styles.totalBadgeText}>{t.count}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
 
-          {/* Records grouped by date */}
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionLine} />
-            <Text style={styles.sectionTitle}>RECORDS</Text>
-            <View style={styles.sectionLine} />
+        {/* Summary */}
+        <View style={styles.summaryBar}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryNum}>{rows.length}</Text>
+            <Text style={styles.summaryLbl}>Records</Text>
           </View>
-          {groups.map(group => (
-            <View key={group.date} style={styles.dateGroup}>
-              <View style={styles.dateHeader}>
-                <Text style={styles.dateHeaderText}>{group.date}</Text>
-                <Text style={styles.dateHeaderCount}>{group.items.length} scans</Text>
-              </View>
-              {group.items.map((r, i) => (
-                <View key={r.id} style={[styles.recordRow, i < group.items.length - 1 && styles.recordRowBorder]}>
-                  <View style={styles.recordLeft}>
-                    <Text style={styles.recordName}>{r.workerName}</Text>
-                    <Text style={styles.recordEmpId}>{r.employeeId || '—'}</Text>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryNum}>{totals.length}</Text>
+            <Text style={styles.summaryLbl}>Workers</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={[styles.summaryNum, { fontSize: 14 }]}>{filterLabel}</Text>
+            <Text style={styles.summaryLbl}>Period</Text>
+          </View>
+        </View>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 60 }} />
+        ) : rows.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>📋</Text>
+            <Text style={styles.emptyText}>No attendance records</Text>
+            <Text style={styles.emptySubText}>Records appear here after face scans</Text>
+          </View>
+        ) : (
+          <>
+            {/* Per-worker totals */}
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionLine} /><Text style={styles.sectionTitle}>BY WORKER</Text><View style={styles.sectionLine} />
+            </View>
+            <View style={styles.totalsCard}>
+              {totals.map((t, i) => (
+                <View key={t.employeeId + i} style={[styles.totalRow, i < totals.length - 1 && styles.totalRowBorder]}>
+                  <View style={styles.totalLeft}>
+                    <Text style={styles.totalName}>{t.name}</Text>
+                    <Text style={styles.totalEmpId}>{t.employeeId || '—'}</Text>
                   </View>
-                  <View style={styles.recordRight}>
-                    <Text style={styles.recordTime}>{formatTime(r.timestamp)}</Text>
-                    <Text style={styles.recordSim}>{(r.similarity * 100).toFixed(0)}%</Text>
+                  <View style={styles.totalBadge}>
+                    <Text style={styles.totalBadgeText}>{t.count}</Text>
                   </View>
                 </View>
               ))}
             </View>
-          ))}
-        </>
-      )}
-    </ScrollView>
+
+            {/* Records grouped by date */}
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionLine} /><Text style={styles.sectionTitle}>RECORDS</Text><View style={styles.sectionLine} />
+            </View>
+            {groups.map(group => (
+              <View key={group.date} style={styles.dateGroup}>
+                <View style={styles.dateHeader}>
+                  <Text style={styles.dateHeaderText}>{group.date}</Text>
+                  <Text style={styles.dateHeaderCount}>{group.items.length} scans</Text>
+                </View>
+                <View style={styles.dateCard}>
+                  {group.items.map((r, i) => (
+                    <View key={r.timestamp + i} style={[styles.recordRow, i < group.items.length - 1 && styles.recordRowBorder]}>
+                      <View style={styles.recordLeft}>
+                        <Text style={styles.recordName}>{r.workerName}</Text>
+                        <Text style={styles.recordEmpId}>{r.employeeId || '—'}</Text>
+                      </View>
+                      <View style={styles.recordRight}>
+                        <Text style={styles.recordTime}>{r.time}</Text>
+                        <Text style={styles.recordDay}>{r.day.slice(0, 3)}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+        {/* bottom padding so last record isn't hidden by action bar */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Fixed bottom action bar */}
+      <View style={styles.actionBar}>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnCSV, busy === 'csv' && styles.actionBtnBusy]}
+          onPress={handleCSV} disabled={!!busy} activeOpacity={0.8}
+        >
+          {busy === 'csv'
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <><Text style={styles.actionBtnIcon}>📊</Text><Text style={styles.actionBtnText}>CSV</Text></>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnPDF, busy === 'pdf' && styles.actionBtnBusy]}
+          onPress={handlePDF} disabled={!!busy} activeOpacity={0.8}
+        >
+          {busy === 'pdf'
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <><Text style={styles.actionBtnIcon}>📄</Text><Text style={styles.actionBtnText}>PDF</Text></>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnXLS, busy === 'xls' && styles.actionBtnBusy]}
+          onPress={handleXLS} disabled={!!busy} activeOpacity={0.8}
+        >
+          {busy === 'xls'
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <><Text style={styles.actionBtnIcon}>📧</Text><Text style={styles.actionBtnText}>Excel</Text></>}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container       : { flex: 1, backgroundColor: '#020817' },
-  content         : { padding: 16, paddingBottom: 48 },
+  root            : { flex: 1, backgroundColor: '#020817' },
+  container       : { flex: 1 },
+  content         : { padding: 16 },
   orb1            : { position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.07 },
-  orb2            : { position: 'absolute', top: 400, left: -60, width: 180, height: 180, borderRadius: 90,  backgroundColor: '#6d28d9', opacity: 0.05 },
+  orb2            : { position: 'absolute', top: 400, left: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.05 },
 
   filterRow       : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 4, marginBottom: 16, borderWidth: 1, borderColor: '#1e293b' },
   filterTab       : { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
@@ -213,11 +320,11 @@ const styles = StyleSheet.create({
   filterTabText   : { fontSize: 12, fontWeight: '600', color: '#475569' },
   filterTabTextActive: { color: '#93c5fd' },
 
-  summaryBar      : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 14, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#1e293b', gap: 8 },
-  summaryCount    : { fontSize: 28, fontWeight: '800', color: '#3b82f6' },
-  summaryLabel    : { flex: 1, fontSize: 13, color: '#64748b', fontWeight: '500' },
-  exportBtn       : { backgroundColor: '#2563eb', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, minWidth: 100, alignItems: 'center' },
-  exportBtnText   : { color: '#fff', fontSize: 13, fontWeight: '700' },
+  summaryBar      : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#1e293b' },
+  summaryItem     : { flex: 1, alignItems: 'center' },
+  summaryNum      : { fontSize: 22, fontWeight: '800', color: '#3b82f6' },
+  summaryLbl      : { fontSize: 11, color: '#475569', marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryDivider  : { width: 1, backgroundColor: '#1e293b', marginVertical: 4 },
 
   empty           : { alignItems: 'center', marginTop: 80, gap: 10 },
   emptyIcon       : { fontSize: 52 },
@@ -238,16 +345,26 @@ const styles = StyleSheet.create({
   totalBadgeText  : { color: '#60a5fa', fontSize: 15, fontWeight: '800' },
 
   dateGroup       : { marginBottom: 16 },
-  dateHeader      : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
+  dateHeader      : { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
   dateHeaderText  : { color: '#64748b', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   dateHeaderCount : { color: '#334155', fontSize: 11 },
+  dateCard        : { backgroundColor: '#0f172a', borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
 
-  recordRow       : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', padding: 12, gap: 12 },
+  recordRow       : { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
   recordRowBorder : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
   recordLeft      : { flex: 1 },
   recordName      : { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
   recordEmpId     : { color: '#475569', fontSize: 12, marginTop: 1 },
   recordRight     : { alignItems: 'flex-end', gap: 2 },
   recordTime      : { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
-  recordSim       : { color: '#10b981', fontSize: 11, fontWeight: '700' },
+  recordDay       : { color: '#334155', fontSize: 11 },
+
+  actionBar       : { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 20, backgroundColor: '#020817', borderTopWidth: 1, borderTopColor: '#1e293b' },
+  actionBtn       : { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14 },
+  actionBtnBusy   : { opacity: 0.6 },
+  actionBtnIcon   : { fontSize: 18 },
+  actionBtnText   : { color: '#fff', fontSize: 14, fontWeight: '700' },
+  actionBtnCSV    : { backgroundColor: '#059669' },
+  actionBtnPDF    : { backgroundColor: '#dc2626' },
+  actionBtnXLS    : { backgroundColor: '#d97706' },
 });

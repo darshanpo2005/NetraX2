@@ -141,6 +141,55 @@ export interface AttendanceRecord extends AttendanceLog {
   employeeId: string;
 }
 
+export interface AttendanceRow {
+  workerName: string;
+  employeeId: string;
+  timestamp: number;
+  date: string;
+  time: string;
+  day: string;
+  similarity: number;
+  location: string;
+}
+
+export const getAttendanceWithWorkers = async (
+  filter: 'today' | 'week' | 'month' | 'all'
+): Promise<AttendanceRow[]> => {
+  const database = getDb();
+  const now = Date.now();
+  let since = 0;
+  if (filter === 'today') {
+    const d = new Date(); d.setHours(0, 0, 0, 0); since = d.getTime();
+  } else if (filter === 'week') {
+    since = now - 7 * 24 * 60 * 60 * 1000;
+  } else if (filter === 'month') {
+    since = now - 30 * 24 * 60 * 60 * 1000;
+  }
+  const sql = filter === 'all'
+    ? `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+         FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
+         ORDER BY a.timestamp DESC`
+    : `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+         FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
+         WHERE a.timestamp >= ? ORDER BY a.timestamp DESC`;
+  const rows = (filter === 'all'
+    ? await database.getAllAsync(sql)
+    : await database.getAllAsync(sql, [since])) as any[];
+  return rows.map(r => {
+    const d = new Date(r.timestamp);
+    return {
+      workerName: r.worker_name,
+      employeeId: r.emp_id ?? '',
+      timestamp : r.timestamp,
+      similarity: r.similarity,
+      location  : r.location ?? '',
+      date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      day : d.toLocaleDateString('en-IN', { weekday: 'long' }),
+    };
+  });
+};
+
 export const getAttendanceRecords = async (
   filter: 'today' | 'week' | 'month' | 'all'
 ): Promise<AttendanceRecord[]> => {
