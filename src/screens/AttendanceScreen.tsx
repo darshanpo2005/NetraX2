@@ -35,7 +35,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const cameraRef            = useRef<Camera>(null);
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const eyeFramesRef         = useRef<number[]>([]);  // rolling window of min(L,R) per frame
+  const eyesWereOpenRef      = useRef(false);
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
@@ -155,19 +155,10 @@ export default function AttendanceScreen({ navigation }: any) {
       console.log('Eye L:', leftEye.toFixed(2), 'R:', rightEye.toFixed(2));
       setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
-      // Rolling window: track min(L,R) so either eye closing registers
-      const eyeOpen = Math.min(leftEye, rightEye);
-      const frames  = eyeFramesRef.current;
-      frames.push(eyeOpen);
-      if (frames.length > 5) frames.shift();
+      const minEye = Math.min(leftEye, rightEye);
+      if (minEye > 0.7) eyesWereOpenRef.current = true;
 
-      // Blink = any consecutive pair: open(>0.6) → closing(<0.5)
-      let blinkFound = false;
-      for (let i = 0; i < frames.length - 1; i++) {
-        if (frames[i] > 0.6 && frames[i + 1] < 0.5) { blinkFound = true; break; }
-      }
-
-      if (blinkFound) {
+      if (eyesWereOpenRef.current && minEye < 0.4) {
         livenessPassedRef.current = true;
         setLivenessPassed(true);
         setLiveFeedback('✓ Blink detected!');
