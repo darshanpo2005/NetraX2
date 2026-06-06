@@ -1,68 +1,67 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity,
   StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import FaceDetector from '@react-native-ml-kit/face-detection';
 import * as Haptics from 'expo-haptics';
 import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
-type Challenge = 'blink' | 'smile' | 'turn_left' | 'turn_right';
+type Challenge = 'blink' | 'smile';
 
 const CHALLENGES: Record<Challenge, { text: string; emoji: string; instruction: string }> = {
-  blink      : { text: 'Blink your eyes',  emoji: '😉', instruction: 'Slowly blink both eyes once' },
-  smile      : { text: 'Smile naturally',  emoji: '😊', instruction: 'Show a natural smile' },
-  turn_left  : { text: 'Turn head left',   emoji: '👈', instruction: 'Slowly turn your head left' },
-  turn_right : { text: 'Turn head right',  emoji: '👉', instruction: 'Slowly turn your head right' },
+  blink: { text: 'Blink your eyes', emoji: '😉', instruction: 'Slowly blink both eyes once' },
+  smile: { text: 'Smile naturally', emoji: '😊', instruction: 'Show a natural smile' },
 };
+
+const LIVENESS_SECS = 5;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
 type ResultType = {
-  type    : 'success' | 'no_face' | 'no_match' | 'error';
-  name?   : string;
-  sim?    : number;
-  message : string;
-  detail? : string;
+  type: 'success' | 'no_face' | 'no_match' | 'error' | 'liveness_fail';
+  name?: string;
+  sim?: number;
+  message: string;
+  detail?: string;
 };
 
 export default function AttendanceScreen({ navigation }: any) {
-  const [step, setStep]           = useState<ScanStep>('liveness');
-  const [timeLeft, setTimeLeft]   = useState(6);
-  const [result, setResult]       = useState<ResultType | null>(null);
-  const [statusMsg, setStatusMsg] = useState('');
-  const [challenge]               = useState<Challenge>(() => {
-    const keys = Object.keys(CHALLENGES) as Challenge[];
-    return keys[Math.floor(Math.random() * keys.length)];
-  });
+  const [step, setStep]               = useState<ScanStep>('liveness');
+  const [timeLeft, setTimeLeft]       = useState(LIVENESS_SECS);
+  const [result, setResult]           = useState<ResultType | null>(null);
+  const [statusMsg, setStatusMsg]     = useState('');
+  const [liveFeedback, setLiveFeedback] = useState('Center your face in the oval');
+  const [livenessPassed, setLivenessPassed] = useState(false);
+  const [challenge]                   = useState<Challenge>(() =>
+    Math.random() < 0.5 ? 'blink' : 'smile'
+  );
 
-  const cameraRef = useRef<Camera>(null);
-  const timerRef  = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const cameraRef            = useRef<Camera>(null);
+  const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const blinkStateRef        = useRef<'open' | 'closed'>('open');
+  const smileCountRef        = useRef(0);
+  const livenessPassedRef    = useRef(false);
+  const captureInProgressRef = useRef(false);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
 
-  useEffect(() => {
-    if (!hasPermission) requestPermission();
-    startTimer();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  const stopAllIntervals = useCallback(() => {
+    if (timerRef.current)   { clearInterval(timerRef.current);   timerRef.current   = undefined; }
+    if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = undefined; }
   }, []);
 
-  const startTimer = () => {
-    let t = 6;
-    timerRef.current = setInterval(() => {
-      t--;
-      setTimeLeft(t);
-      if (t <= 0) { clearInterval(timerRef.current); handleScan(); }
-    }, 1000);
-  };
+  // Keep a stable ref so the setInterval callback always sees the latest version
+  const stopAllIntervalsRef = useRef(stopAllIntervals);
+  stopAllIntervalsRef.current = stopAllIntervals;
 
-  const handleScan = async () => {
-    if (timerRef.current) clearInterval(timerRef.current);
+  const handleRecognition = useCallback(async () => {
     setStep('scanning');
     setStatusMsg('Capturing image...');
-
     try {
       if (!cameraRef.current) throw new Error('Camera not ready');
 
@@ -132,8 +131,113 @@ export default function AttendanceScreen({ navigation }: any) {
       setResult({ type: 'error', message: 'Scan Failed', detail: e.message });
       setStep('result');
     }
-  };
+  }, []);
 
+  const handleRecognitionRef = useRef(handleRecognition);
+  handleRecognitionRef.current = handleRecognition;
+
+  // Checks a single captured frame for liveness signals
+  const checkLivenessFrame = useCallback(async (currentChallenge: Challenge) => {
+    if (livenessPassedRef.current || captureInProgressRef.current) return;
+    if (!cameraRef.current) return;
+
+    captureInProgressRef.current = true;
+    try {
+      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
+      const uri   = 'file://' + photo.path;
+
+      const faces = await FaceDetector.detect(uri, {
+        classificationMode: 'all',
+        performanceMode   : 'accurate',
+      });
+
+      if (!faces || faces.length === 0) {
+        setLiveFeedback('No face detected — center your face');
+        return;
+      }
+
+      const face    = faces[0];
+      const leftEye = face.leftEyeOpenProbability  ?? 1;
+      const rightEye= face.rightEyeOpenProbability ?? 1;
+      const smile   = face.smilingProbability      ?? 0;
+
+      if (currentChallenge === 'blink') {
+        const avgEye = (leftEye + rightEye) / 2;
+        if (blinkStateRef.current === 'open') {
+          if (avgEye < 0.3) {
+            blinkStateRef.current = 'closed';
+            setLiveFeedback('Good! Now open your eyes...');
+          } else {
+            setLiveFeedback('Now blink your eyes!');
+          }
+        } else {
+          if (avgEye > 0.7) {
+            livenessPassedRef.current = true;
+            setLivenessPassed(true);
+            setLiveFeedback('✓ Blink detected!');
+            stopAllIntervalsRef.current();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => handleRecognitionRef.current(), 600);
+          } else {
+            setLiveFeedback('Good! Now open your eyes...');
+          }
+        }
+      } else {
+        // smile challenge
+        if (smile > 0.75) {
+          smileCountRef.current += 1;
+          setLiveFeedback(`Smile detected! (${smileCountRef.current}/2)`);
+          if (smileCountRef.current >= 2) {
+            livenessPassedRef.current = true;
+            setLivenessPassed(true);
+            setLiveFeedback('✓ Smile confirmed!');
+            stopAllIntervalsRef.current();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => handleRecognitionRef.current(), 600);
+          }
+        } else {
+          smileCountRef.current = 0;
+          setLiveFeedback(smile > 0.4 ? 'Almost! Smile bigger!' : 'Show a big smile!');
+        }
+      }
+    } catch {
+      // silently skip failed captures
+    } finally {
+      captureInProgressRef.current = false;
+    }
+  }, []); // stable — all mutable state accessed via refs
+
+  useEffect(() => {
+    if (!hasPermission) requestPermission();
+
+    let t = LIVENESS_SECS;
+    timerRef.current = setInterval(() => {
+      t--;
+      setTimeLeft(t);
+      if (t <= 0) {
+        stopAllIntervalsRef.current();
+        if (!livenessPassedRef.current) {
+          setResult({
+            type   : 'liveness_fail',
+            message: 'Liveness Check Failed',
+            detail : 'Please try again and complete the challenge within 5 seconds.',
+          });
+          setStep('result');
+        }
+      }
+    }, 1000);
+
+    // capture a frame every 500 ms; pass challenge as argument to avoid stale closure
+    const capturedChallenge = challenge;
+    captureRef.current = setInterval(
+      () => checkLivenessFrame(capturedChallenge),
+      500,
+    );
+
+    return () => stopAllIntervalsRef.current();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Permission guard ────────────────────────────────────────────────────────
   if (!hasPermission) return (
     <View style={styles.center}>
       <Text style={styles.permIcon}>📷</Text>
@@ -151,43 +255,69 @@ export default function AttendanceScreen({ navigation }: any) {
     </View>
   );
 
+  // ─── Liveness step ──────────────────────────────────────────────────────────
   if (step === 'liveness') {
     const ch = CHALLENGES[challenge];
+    const timerPct = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
     return (
       <View style={styles.cameraContainer}>
         <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
           device={device} isActive={true} photo={true} />
         <View style={styles.dimOverlay} />
 
+        {/* Face oval */}
         <View style={styles.faceOvalContainer}>
-          <View style={styles.faceOval} />
-          <Text style={styles.faceOvalLabel}>Position face here</Text>
+          <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={[
+              styles.faceOval,
+              livenessPassed && { borderColor: '#10b981', borderStyle: 'solid' },
+            ]} />
+            {livenessPassed && (
+              <View style={styles.passedBadge}>
+                <Text style={styles.passedBadgeText}>✓</Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.faceOvalLabel, livenessPassed && { color: '#10b981' }]}>
+            {livenessPassed ? 'Challenge passed!' : 'Position face here'}
+          </Text>
         </View>
 
+        {/* Challenge card */}
         <View style={styles.challengeCard}>
           <View style={styles.timerRow}>
-            <View style={[styles.timerBar, { width: `${(timeLeft / 6) * 100}%` as any }]} />
+            <View style={[
+              styles.timerBar,
+              { width: timerPct, backgroundColor: livenessPassed ? '#10b981' : '#3b82f6' },
+            ]} />
           </View>
           <View style={styles.challengeContent}>
-            <Text style={styles.challengeEmoji}>{ch.emoji}</Text>
+            <Text style={styles.challengeEmoji}>{livenessPassed ? '✅' : ch.emoji}</Text>
             <View style={styles.challengeText}>
               <Text style={styles.challengeTitle}>{ch.text}</Text>
-              <Text style={styles.challengeInstruction}>{ch.instruction}</Text>
+              <Text style={[
+                styles.liveFeedbackText,
+                livenessPassed && { color: '#10b981' },
+              ]}>
+                {liveFeedback}
+              </Text>
             </View>
-            <View style={styles.challengeTimer}>
-              <Text style={styles.timerNum}>{timeLeft}</Text>
+            <View style={[
+              styles.challengeTimer,
+              livenessPassed && { borderColor: 'rgba(16,185,129,0.3)', backgroundColor: 'rgba(16,185,129,0.15)' },
+            ]}>
+              <Text style={[styles.timerNum, livenessPassed && { color: '#10b981' }]}>
+                {livenessPassed ? '✓' : timeLeft}
+              </Text>
             </View>
           </View>
-          <Text style={styles.livenessLabel}>🛡️ Anti-Spoofing Check</Text>
+          <Text style={styles.livenessLabel}>🛡️ Anti-Spoofing Check — Automatic</Text>
         </View>
-
-        <TouchableOpacity style={styles.doneBtn} onPress={handleScan} activeOpacity={0.8}>
-          <Text style={styles.doneBtnText}>✅  Challenge Complete — Scan Now</Text>
-        </TouchableOpacity>
       </View>
     );
   }
 
+  // ─── Scanning step ──────────────────────────────────────────────────────────
   if (step === 'scanning') return (
     <View style={styles.cameraContainer}>
       <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
@@ -204,12 +334,14 @@ export default function AttendanceScreen({ navigation }: any) {
     </View>
   );
 
+  // ─── Result step ─────────────────────────────────────────────────────────────
   if (step === 'result' && result) {
     const resultConfig = {
-      success  : { icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)'  },
-      no_face  : { icon: '🚫', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'   },
-      no_match : { icon: '❓', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)'  },
-      error    : { icon: '⚠️', color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)' },
+      success      : { icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)'  },
+      no_face      : { icon: '🚫', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'   },
+      no_match     : { icon: '❓', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)'  },
+      error        : { icon: '⚠️', color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)' },
+      liveness_fail: { icon: '🔒', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'  },
     };
     const cfg = resultConfig[result.type];
 
@@ -243,18 +375,27 @@ export default function AttendanceScreen({ navigation }: any) {
             </>
           )}
 
-          {(result.type === 'no_face' || result.type === 'no_match') && (
+          {(result.type === 'no_face' || result.type === 'no_match' || result.type === 'liveness_fail') && (
             <View style={styles.errorDetail}>
               <Text style={styles.errorDetailText}>{result.detail}</Text>
               <View style={styles.tipsBox}>
                 <Text style={styles.tipsTitle}>
-                  {result.type === 'no_face' ? 'Tips for better detection:' : 'Possible reasons:'}
+                  {result.type === 'no_face'       ? 'Tips for better detection:' :
+                   result.type === 'liveness_fail' ? 'Tips for liveness check:'   :
+                                                     'Possible reasons:'}
                 </Text>
                 {result.type === 'no_face' ? (
                   <>
                     <Text style={styles.tipItem}>• Ensure face is well lit, no shadows</Text>
                     <Text style={styles.tipItem}>• Remove glasses or mask if wearing</Text>
                     <Text style={styles.tipItem}>• Hold phone at eye level</Text>
+                  </>
+                ) : result.type === 'liveness_fail' ? (
+                  <>
+                    <Text style={styles.tipItem}>• Make sure your face is well-lit</Text>
+                    <Text style={styles.tipItem}>• Position your face fully in the oval</Text>
+                    <Text style={styles.tipItem}>• For blink: close both eyes fully, then open</Text>
+                    <Text style={styles.tipItem}>• For smile: show a broad, natural smile</Text>
                   </>
                 ) : (
                   <>
@@ -284,55 +425,55 @@ export default function AttendanceScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  cameraContainer    : { flex: 1, backgroundColor: '#000' },
-  dimOverlay         : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  faceOvalContainer  : { position: 'absolute', top: '8%', alignSelf: 'center', alignItems: 'center', gap: 12 },
-  faceOval           : { width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderColor: '#3b82f6', borderStyle: 'dashed' },
-  faceOvalLabel      : { color: 'rgba(255,255,255,0.6)', fontSize: 12, letterSpacing: 1 },
-  challengeCard      : { position: 'absolute', bottom: 120, left: 16, right: 16, backgroundColor: 'rgba(2,8,23,0.92)', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#1e293b', gap: 12 },
-  timerRow           : { height: 3, backgroundColor: '#1e293b', borderRadius: 2, overflow: 'hidden' },
-  timerBar           : { height: '100%', backgroundColor: '#3b82f6', borderRadius: 2 },
-  challengeContent   : { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  challengeEmoji     : { fontSize: 36 },
-  challengeText      : { flex: 1 },
-  challengeTitle     : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },
-  challengeInstruction: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  challengeTimer     : { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', alignItems: 'center', justifyContent: 'center' },
-  timerNum           : { color: '#60a5fa', fontSize: 18, fontWeight: '800' },
-  livenessLabel      : { fontSize: 11, color: '#334155', textAlign: 'center', letterSpacing: 1 },
-  doneBtn            : { position: 'absolute', bottom: 48, left: 16, right: 16, backgroundColor: '#10b981', borderRadius: 16, padding: 18, alignItems: 'center' },
-  doneBtnText        : { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
-  scanningOverlay    : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  scanLine           : { position: 'absolute', width: 220, height: 2, backgroundColor: '#f59e0b', opacity: 0.8 },
-  scanStatusCard     : { backgroundColor: 'rgba(2,8,23,0.9)', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 10, marginTop: 16, borderWidth: 1, borderColor: '#1e293b' },
-  scanStatusText     : { color: '#f59e0b', fontSize: 14, fontWeight: '600' },
-  center             : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
-  permIcon           : { fontSize: 56 },
-  permTitle          : { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
-  permSub            : { fontSize: 13, color: '#475569', textAlign: 'center' },
-  permBtn            : { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 },
-  permBtnText        : { color: '#fff', fontWeight: '700', fontSize: 15 },
-  resultContainer    : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
-  orb1               : { position: 'absolute', top: -40, left: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.1 },
-  orb2               : { position: 'absolute', bottom: -40, right: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.08 },
-  resultCard         : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, alignItems: 'center', gap: 12 },
-  resultIcon         : { fontSize: 64, marginBottom: 4 },
-  resultTitle        : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  workerName         : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
-  simContainer       : { width: '100%', gap: 6 },
-  simLabel           : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
-  simBar             : { height: 8, backgroundColor: '#1e293b', borderRadius: 4, overflow: 'hidden' },
-  simFill            : { height: '100%', borderRadius: 4 },
-  simValue           : { fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  successMeta        : { width: '100%', gap: 4, marginTop: 4 },
-  successMetaText    : { color: '#475569', fontSize: 12, textAlign: 'center' },
-  errorDetail        : { width: '100%', gap: 12 },
-  errorDetailText    : { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  tipsBox            : { backgroundColor: 'rgba(15,23,42,0.8)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: '#1e293b' },
-  tipsTitle          : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
-  tipItem            : { color: '#475569', fontSize: 12, lineHeight: 18 },
-  retryBtn           : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
-  retryBtnText       : { color: '#fff', fontWeight: '700', fontSize: 16 },
-  homeBtn            : { width: '100%', backgroundColor: '#0f172a', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b' },
-  homeBtnText        : { color: '#94a3b8', fontWeight: '600', fontSize: 15 },
+  cameraContainer     : { flex: 1, backgroundColor: '#000' },
+  dimOverlay          : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  faceOvalContainer   : { position: 'absolute', top: '8%', alignSelf: 'center', alignItems: 'center', gap: 12 },
+  faceOval            : { width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderColor: '#3b82f6', borderStyle: 'dashed' },
+  faceOvalLabel       : { color: 'rgba(255,255,255,0.6)', fontSize: 12, letterSpacing: 1 },
+  passedBadge         : { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(16,185,129,0.9)', alignItems: 'center', justifyContent: 'center' },
+  passedBadgeText     : { fontSize: 36, color: '#fff' },
+  challengeCard       : { position: 'absolute', bottom: 48, left: 16, right: 16, backgroundColor: 'rgba(2,8,23,0.92)', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#1e293b', gap: 12 },
+  timerRow            : { height: 3, backgroundColor: '#1e293b', borderRadius: 2, overflow: 'hidden' },
+  timerBar            : { height: '100%', borderRadius: 2 },
+  challengeContent    : { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  challengeEmoji      : { fontSize: 36 },
+  challengeText       : { flex: 1, gap: 4 },
+  challengeTitle      : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },
+  liveFeedbackText    : { fontSize: 12, color: '#94a3b8' },
+  challengeTimer      : { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', alignItems: 'center', justifyContent: 'center' },
+  timerNum            : { color: '#60a5fa', fontSize: 18, fontWeight: '800' },
+  livenessLabel       : { fontSize: 11, color: '#334155', textAlign: 'center', letterSpacing: 1 },
+  scanningOverlay     : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  scanLine            : { position: 'absolute', width: 220, height: 2, backgroundColor: '#f59e0b', opacity: 0.8 },
+  scanStatusCard      : { backgroundColor: 'rgba(2,8,23,0.9)', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 10, marginTop: 16, borderWidth: 1, borderColor: '#1e293b' },
+  scanStatusText      : { color: '#f59e0b', fontSize: 14, fontWeight: '600' },
+  center              : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
+  permIcon            : { fontSize: 56 },
+  permTitle           : { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
+  permSub             : { fontSize: 13, color: '#475569', textAlign: 'center' },
+  permBtn             : { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 },
+  permBtnText         : { color: '#fff', fontWeight: '700', fontSize: 15 },
+  resultContainer     : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
+  orb1                : { position: 'absolute', top: -40, left: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.1 },
+  orb2                : { position: 'absolute', bottom: -40, right: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.08 },
+  resultCard          : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, alignItems: 'center', gap: 12 },
+  resultIcon          : { fontSize: 64, marginBottom: 4 },
+  resultTitle         : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  workerName          : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
+  simContainer        : { width: '100%', gap: 6 },
+  simLabel            : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
+  simBar              : { height: 8, backgroundColor: '#1e293b', borderRadius: 4, overflow: 'hidden' },
+  simFill             : { height: '100%', borderRadius: 4 },
+  simValue            : { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  successMeta         : { width: '100%', gap: 4, marginTop: 4 },
+  successMetaText     : { color: '#475569', fontSize: 12, textAlign: 'center' },
+  errorDetail         : { width: '100%', gap: 12 },
+  errorDetailText     : { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  tipsBox             : { backgroundColor: 'rgba(15,23,42,0.8)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: '#1e293b' },
+  tipsTitle           : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
+  tipItem             : { color: '#475569', fontSize: 12, lineHeight: 18 },
+  retryBtn            : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
+  retryBtnText        : { color: '#fff', fontWeight: '700', fontSize: 16 },
+  homeBtn             : { width: '100%', backgroundColor: '#0f172a', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b' },
+  homeBtnText         : { color: '#94a3b8', fontWeight: '600', fontSize: 15 },
 });
