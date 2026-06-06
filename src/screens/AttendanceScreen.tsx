@@ -136,12 +136,13 @@ export default function AttendanceScreen({ navigation }: any) {
 
     captureInProgressRef.current = true;
     try {
-      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
+      const photo = await cameraRef.current.takePhoto({ flash: 'off', enableShutterSound: false });
       const uri   = 'file://' + photo.path;
 
       const faces = await FaceDetector.detect(uri, {
         classificationMode: 'all',
-        performanceMode   : 'accurate',
+        performanceMode   : 'fast',
+        landmarkMode      : 'none',
       });
 
       if (!faces || faces.length === 0) {
@@ -165,7 +166,7 @@ export default function AttendanceScreen({ navigation }: any) {
 
       if (eyesWereOpenRef.current) {
         minEyeSeenRef.current = Math.min(minEyeSeenRef.current, minEye);
-        if (minEyeSeenRef.current < 0.6) {
+        if (minEyeSeenRef.current < 0.65) {
           livenessPassedRef.current = true;
           setLivenessPassed(true);
           setLiveFeedback('✓ Blink detected!');
