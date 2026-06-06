@@ -10,12 +10,7 @@ import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
-type Challenge = 'blink' | 'smile';
-
-const CHALLENGES: Record<Challenge, { text: string; emoji: string; instruction: string }> = {
-  blink: { text: 'Blink your eyes', emoji: '😉', instruction: 'Slowly blink both eyes once' },
-  smile: { text: 'Smile naturally', emoji: '😊', instruction: 'Show a natural smile' },
-};
+const CHALLENGE = { text: 'Blink your eyes', emoji: '😉', instruction: 'Slowly blink both eyes once' };
 
 const LIVENESS_SECS = 10;
 
@@ -36,9 +31,6 @@ export default function AttendanceScreen({ navigation }: any) {
   const [liveFeedback, setLiveFeedback] = useState('Center your face in the oval');
   const [livenessPassed, setLivenessPassed] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
-  const [challenge]                   = useState<Challenge>(() =>
-    Math.random() < 0.5 ? 'blink' : 'smile'
-  );
 
   const cameraRef            = useRef<Camera>(null);
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -137,7 +129,7 @@ export default function AttendanceScreen({ navigation }: any) {
   handleRecognitionRef.current = handleRecognition;
 
   // Checks a single captured frame for liveness signals
-  const checkLivenessFrame = useCallback(async (currentChallenge: Challenge) => {
+  const checkLivenessFrame = useCallback(async () => {
     if (livenessPassedRef.current || captureInProgressRef.current) return;
     if (!cameraRef.current) return;
 
@@ -159,48 +151,32 @@ export default function AttendanceScreen({ navigation }: any) {
       const face    = faces[0];
       const leftEye = face.leftEyeOpenProbability  ?? 1;
       const rightEye= face.rightEyeOpenProbability ?? 1;
-      const smile   = face.smilingProbability      ?? 0;
 
-      console.log('Eye L:', leftEye.toFixed(2), 'R:', rightEye.toFixed(2), 'Smile:', smile.toFixed(2));
-      setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)} | Smile: ${smile.toFixed(2)}`);
+      console.log('Eye L:', leftEye.toFixed(2), 'R:', rightEye.toFixed(2));
+      setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
-      if (currentChallenge === 'blink') {
-        // Rolling window: track min(L,R) so either eye closing registers
-        const eyeOpen = Math.min(leftEye, rightEye);
-        const frames  = eyeFramesRef.current;
-        frames.push(eyeOpen);
-        if (frames.length > 5) frames.shift();
+      // Rolling window: track min(L,R) so either eye closing registers
+      const eyeOpen = Math.min(leftEye, rightEye);
+      const frames  = eyeFramesRef.current;
+      frames.push(eyeOpen);
+      if (frames.length > 5) frames.shift();
 
-        // Blink = any consecutive pair: open(>0.6) → closing(<0.5)
-        let blinkFound = false;
-        for (let i = 0; i < frames.length - 1; i++) {
-          if (frames[i] > 0.6 && frames[i + 1] < 0.5) { blinkFound = true; break; }
-        }
+      // Blink = any consecutive pair: open(>0.6) → closing(<0.5)
+      let blinkFound = false;
+      for (let i = 0; i < frames.length - 1; i++) {
+        if (frames[i] > 0.6 && frames[i + 1] < 0.5) { blinkFound = true; break; }
+      }
 
-        if (blinkFound) {
-          livenessPassedRef.current = true;
-          setLivenessPassed(true);
-          setLiveFeedback('✓ Blink detected!');
-          stopAllIntervalsRef.current();
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => handleRecognitionRef.current(), 600);
-        } else {
-          setLiveFeedback('Now blink your eyes!');
-        }
+      if (blinkFound) {
+        livenessPassedRef.current = true;
+        setLivenessPassed(true);
+        setLiveFeedback('✓ Blink detected!');
+        stopAllIntervalsRef.current();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => handleRecognitionRef.current(), 600);
       } else {
-        // smile challenge — single frame above threshold is enough
-        if (smile > 0.60) {
-          livenessPassedRef.current = true;
-          setLivenessPassed(true);
-          setLiveFeedback('✓ Smile confirmed!');
-          stopAllIntervalsRef.current();
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => handleRecognitionRef.current(), 600);
-        } else {
-          setLiveFeedback(smile > 0.35 ? 'Almost! Smile bigger!' : 'Show a big smile!');
-        }
+        setLiveFeedback('Now blink your eyes!');
       }
     } catch {
       // silently skip failed captures
@@ -229,12 +205,7 @@ export default function AttendanceScreen({ navigation }: any) {
       }
     }, 1000);
 
-    // capture a frame every 500 ms; pass challenge as argument to avoid stale closure
-    const capturedChallenge = challenge;
-    captureRef.current = setInterval(
-      () => checkLivenessFrame(capturedChallenge),
-      150,
-    );
+    captureRef.current = setInterval(checkLivenessFrame, 150);
 
     return () => stopAllIntervalsRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -259,7 +230,6 @@ export default function AttendanceScreen({ navigation }: any) {
 
   // ─── Liveness step ──────────────────────────────────────────────────────────
   if (step === 'liveness') {
-    const ch = CHALLENGES[challenge];
     const timerPct = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
     return (
       <View style={styles.cameraContainer}>
@@ -294,9 +264,9 @@ export default function AttendanceScreen({ navigation }: any) {
             ]} />
           </View>
           <View style={styles.challengeContent}>
-            <Text style={styles.challengeEmoji}>{livenessPassed ? '✅' : ch.emoji}</Text>
+            <Text style={styles.challengeEmoji}>{livenessPassed ? '✅' : CHALLENGE.emoji}</Text>
             <View style={styles.challengeText}>
-              <Text style={styles.challengeTitle}>{ch.text}</Text>
+              <Text style={styles.challengeTitle}>{CHALLENGE.text}</Text>
               <Text style={[
                 styles.liveFeedbackText,
                 livenessPassed && { color: '#10b981' },
