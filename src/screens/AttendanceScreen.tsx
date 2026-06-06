@@ -17,7 +17,7 @@ const CHALLENGES: Record<Challenge, { text: string; emoji: string; instruction: 
   smile: { text: 'Smile naturally', emoji: '😊', instruction: 'Show a natural smile' },
 };
 
-const LIVENESS_SECS = 8;
+const LIVENESS_SECS = 10;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
 type ResultType = {
@@ -43,7 +43,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const cameraRef            = useRef<Camera>(null);
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const eyesWereOpenRef      = useRef(false);
+  const eyeFramesRef         = useRef<number[]>([]);  // rolling window of min(L,R) per frame
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
@@ -161,11 +161,23 @@ export default function AttendanceScreen({ navigation }: any) {
       const rightEye= face.rightEyeOpenProbability ?? 1;
       const smile   = face.smilingProbability      ?? 0;
 
-      setDebugInfo(`Eyes: ${((leftEye + rightEye) / 2).toFixed(2)} | Smile: ${smile.toFixed(2)}`);
+      console.log('Eye L:', leftEye.toFixed(2), 'R:', rightEye.toFixed(2), 'Smile:', smile.toFixed(2));
+      setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)} | Smile: ${smile.toFixed(2)}`);
 
       if (currentChallenge === 'blink') {
-        // Pass: eyes were open last frame, now either eye drops below 0.4
-        if (eyesWereOpenRef.current && (leftEye < 0.4 || rightEye < 0.4)) {
+        // Rolling window: track min(L,R) so either eye closing registers
+        const eyeOpen = Math.min(leftEye, rightEye);
+        const frames  = eyeFramesRef.current;
+        frames.push(eyeOpen);
+        if (frames.length > 5) frames.shift();
+
+        // Blink = any consecutive pair: open(>0.6) → closing(<0.5)
+        let blinkFound = false;
+        for (let i = 0; i < frames.length - 1; i++) {
+          if (frames[i] > 0.6 && frames[i + 1] < 0.5) { blinkFound = true; break; }
+        }
+
+        if (blinkFound) {
           livenessPassedRef.current = true;
           setLivenessPassed(true);
           setLiveFeedback('✓ Blink detected!');
@@ -174,16 +186,11 @@ export default function AttendanceScreen({ navigation }: any) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
-          if (leftEye > 0.6 && rightEye > 0.6) {
-            eyesWereOpenRef.current = true;
-            setLiveFeedback('Now blink your eyes!');
-          } else {
-            setLiveFeedback('Open your eyes fully...');
-          }
+          setLiveFeedback('Now blink your eyes!');
         }
       } else {
         // smile challenge — single frame above threshold is enough
-        if (smile > 0.65) {
+        if (smile > 0.60) {
           livenessPassedRef.current = true;
           setLivenessPassed(true);
           setLiveFeedback('✓ Smile confirmed!');
@@ -192,7 +199,7 @@ export default function AttendanceScreen({ navigation }: any) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
-          setLiveFeedback(smile > 0.4 ? 'Almost! Smile bigger!' : 'Show a big smile!');
+          setLiveFeedback(smile > 0.35 ? 'Almost! Smile bigger!' : 'Show a big smile!');
         }
       }
     } catch {
@@ -215,7 +222,7 @@ export default function AttendanceScreen({ navigation }: any) {
           setResult({
             type   : 'liveness_fail',
             message: 'Liveness Check Failed',
-            detail : 'Please try again and complete the challenge within 8 seconds.',
+            detail : 'Please try again and complete the challenge within 10 seconds.',
           });
           setStep('result');
         }
@@ -226,7 +233,7 @@ export default function AttendanceScreen({ navigation }: any) {
     const capturedChallenge = challenge;
     captureRef.current = setInterval(
       () => checkLivenessFrame(capturedChallenge),
-      300,
+      150,
     );
 
     return () => stopAllIntervalsRef.current();
