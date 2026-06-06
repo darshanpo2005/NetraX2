@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
-import { addWorker, workerExists } from '../services/DatabaseService';
-import { l2Normalize } from '../services/FaceService';
+import { addWorker, workerExists, getAllWorkerEmbeddings } from '../services/DatabaseService';
+import { l2Normalize, cosineSimilarity } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
 const REQUIRED_CAPTURES = 5;
@@ -18,7 +18,9 @@ export default function EnrollScreen({ navigation }: any) {
   const [captures, setCaptures]     = useState(0);
   const [embeddings, setEmbeddings] = useState<number[][]>([]);
   const [status, setStatus]         = useState('');
-  const cameraRef = useRef<Camera>(null);
+  const cameraRef        = useRef<Camera>(null);
+  const embeddingsRef    = useRef<number[][]>([]);  // avoids stale-closure bug
+  const isCapturingRef   = useRef(false);            // blocks concurrent taps
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
@@ -35,6 +37,8 @@ export default function EnrollScreen({ navigation }: any) {
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
+    if (isCapturingRef.current) return;
+    isCapturingRef.current = true;
     setStatus('Processing...');
     try {
       const photo = await cameraRef.current.takePhoto({ flash: 'off' });
@@ -52,28 +56,58 @@ export default function EnrollScreen({ navigation }: any) {
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      const newEmbeddings = [...embeddings, result.embedding];
+      embeddingsRef.current = [...embeddingsRef.current, result.embedding];
+      const newEmbeddings = embeddingsRef.current;
       setEmbeddings(newEmbeddings);
       setCaptures(newEmbeddings.length);
+      console.log('Capture', newEmbeddings.length, '/', REQUIRED_CAPTURES);
 
       if (newEmbeddings.length >= REQUIRED_CAPTURES) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setStep('processing');
         setStatus('Saving...');
 
-        // Average embeddings from all angles for robustness
         const avgEmbedding = newEmbeddings[0].map((_, i) =>
           newEmbeddings.reduce((sum, emb) => sum + emb[i], 0) / newEmbeddings.length
         );
+        const normalizedAvg = l2Normalize(avgEmbedding);
 
+        // ── Duplicate face check ──
+        const DUPLICATE_THRESHOLD = 0.70;
+        const allWorkers = await getAllWorkerEmbeddings();
+        console.log('Checking duplicates against', allWorkers.length, 'workers');
+        console.log('First worker embedding length:', allWorkers[0]?.embedding?.length);
+        for (const worker of allWorkers) {
+          const workerEmbedding: number[] = typeof worker.embedding === 'string'
+            ? JSON.parse(worker.embedding)
+            : worker.embedding;
+          const sim = cosineSimilarity(normalizedAvg, workerEmbedding);
+          console.log(`Similarity with ${worker.name}: ${sim}`);
+          if (sim > DUPLICATE_THRESHOLD) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            embeddingsRef.current = [];
+            setEmbeddings([]);
+            setCaptures(0);
+            setStep('camera');
+            setStatus('Duplicate detected. Try again.');
+            Alert.alert(
+              'Face Already Registered',
+              `This face is already registered as "${worker.name}".\nEach person can only be registered once.`,
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+        }
+
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         await addWorker({
-          id        : `worker_${Date.now()}`,
+          id        : `EMP_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
           name      : name.trim(),
           employeeId: empId.trim(),
-          embedding : l2Normalize(avgEmbedding),
+          embedding : normalizedAvg,
           createdAt : Date.now(),
         });
+        embeddingsRef.current = [];
         setStep('done');
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -83,6 +117,8 @@ export default function EnrollScreen({ navigation }: any) {
     } catch (e: any) {
       Alert.alert('Error', e.message);
       setStatus('Error. Try again.');
+    } finally {
+      isCapturingRef.current = false;
     }
   };
 
@@ -184,6 +220,7 @@ export default function EnrollScreen({ navigation }: any) {
         onPress={() => {
           setName(''); setEmpId(''); setStep('form');
           setCaptures(0); setEmbeddings([]); setStatus('');
+          embeddingsRef.current = [];
         }}
       >
         <Text style={styles.btnText}>Register Another</Text>

@@ -136,3 +136,25 @@ export const getTodayAttendanceCount = async (): Promise<number> => {
   ) as any;
   return result?.count || 0;
 };
+
+export const getAllWorkerEmbeddings = async (): Promise<Array<{
+  id: string;
+  name: string;
+  embedding: number[];
+}>> => {
+  try {
+    const db = getDb();
+    const result = await db.getAllAsync('SELECT id, name, embedding FROM workers') as any[];
+    console.log('getAllWorkerEmbeddings: found', result.length, 'workers');
+    return result.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      embedding: typeof r.embedding === 'string'
+        ? JSON.parse(r.embedding)
+        : r.embedding,
+    }));
+  } catch (e: any) {
+    console.error('getAllWorkerEmbeddings error:', e.message);
+    return [];
+  }
+};
