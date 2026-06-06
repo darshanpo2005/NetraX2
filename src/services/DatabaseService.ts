@@ -137,6 +137,44 @@ export const getTodayAttendanceCount = async (): Promise<number> => {
   return result?.count || 0;
 };
 
+export interface AttendanceRecord extends AttendanceLog {
+  employeeId: string;
+}
+
+export const getAttendanceRecords = async (
+  filter: 'today' | 'week' | 'month' | 'all'
+): Promise<AttendanceRecord[]> => {
+  const database = getDb();
+  const now = Date.now();
+  let since = 0;
+  if (filter === 'today') {
+    const d = new Date(); d.setHours(0, 0, 0, 0); since = d.getTime();
+  } else if (filter === 'week') {
+    since = now - 7 * 24 * 60 * 60 * 1000;
+  } else if (filter === 'month') {
+    since = now - 30 * 24 * 60 * 60 * 1000;
+  }
+  const sql = filter === 'all'
+    ? `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+         FROM attendance_log a
+         LEFT JOIN workers w ON a.worker_id = w.id
+         ORDER BY a.timestamp DESC`
+    : `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+         FROM attendance_log a
+         LEFT JOIN workers w ON a.worker_id = w.id
+         WHERE a.timestamp >= ?
+         ORDER BY a.timestamp DESC`;
+  const rows = (filter === 'all'
+    ? await database.getAllAsync(sql)
+    : await database.getAllAsync(sql, [since])) as any[];
+  return rows.map(r => ({
+    id: r.id, workerId: r.worker_id, workerName: r.worker_name,
+    timestamp: r.timestamp, similarity: r.similarity,
+    synced: r.synced, location: r.location,
+    employeeId: r.emp_id ?? '',
+  }));
+};
+
 export const getAllWorkerEmbeddings = async (): Promise<Array<{
   id: string;
   name: string;

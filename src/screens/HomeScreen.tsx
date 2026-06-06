@@ -54,6 +54,7 @@ export default function HomeScreen({ navigation }: any) {
     { icon: '🎯', label: 'Mark\nAttendance',   sub: 'Face scan authentication', color: '#059669', bg: 'rgba(5,150,105,0.1)', border: 'rgba(5,150,105,0.3)',  screen: 'Attendance' },
     { icon: '👥', label: 'View\nWorkforce',    sub: 'Manage registered staff', color: '#7c3aed', bg: 'rgba(124,58,237,0.1)', border: 'rgba(124,58,237,0.3)', screen: 'WorkerList' },
     { icon: '⚡', label: 'Admin\nConsole',     sub: 'Benchmarks & system logs', color: '#d97706', bg: 'rgba(217,119,6,0.1)', border: 'rgba(217,119,6,0.3)', screen: 'Admin'      },
+    { icon: '📊', label: 'View\nReports',      sub: 'Attendance history & export', color: '#0891b2', bg: 'rgba(8,145,178,0.1)', border: 'rgba(8,145,178,0.3)', screen: 'Reports'    },
   ];
 
   const now = new Date();
