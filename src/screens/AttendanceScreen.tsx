@@ -17,7 +17,7 @@ const CHALLENGES: Record<Challenge, { text: string; emoji: string; instruction: 
   smile: { text: 'Smile naturally', emoji: '😊', instruction: 'Show a natural smile' },
 };
 
-const LIVENESS_SECS = 5;
+const LIVENESS_SECS = 8;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
 type ResultType = {
@@ -35,6 +35,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const [statusMsg, setStatusMsg]     = useState('');
   const [liveFeedback, setLiveFeedback] = useState('Center your face in the oval');
   const [livenessPassed, setLivenessPassed] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
   const [challenge]                   = useState<Challenge>(() =>
     Math.random() < 0.5 ? 'blink' : 'smile'
   );
@@ -42,8 +43,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const cameraRef            = useRef<Camera>(null);
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const blinkStateRef        = useRef<'open' | 'closed'>('open');
-  const smileCountRef        = useRef(0);
+  const eyesWereOpenRef      = useRef(false);
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
@@ -161,42 +161,37 @@ export default function AttendanceScreen({ navigation }: any) {
       const rightEye= face.rightEyeOpenProbability ?? 1;
       const smile   = face.smilingProbability      ?? 0;
 
+      setDebugInfo(`Eyes: ${((leftEye + rightEye) / 2).toFixed(2)} | Smile: ${smile.toFixed(2)}`);
+
       if (currentChallenge === 'blink') {
-        const avgEye = (leftEye + rightEye) / 2;
-        if (blinkStateRef.current === 'open') {
-          if (avgEye < 0.3) {
-            blinkStateRef.current = 'closed';
-            setLiveFeedback('Good! Now open your eyes...');
-          } else {
-            setLiveFeedback('Now blink your eyes!');
-          }
+        // Pass: eyes were open last frame, now either eye drops below 0.4
+        if (eyesWereOpenRef.current && (leftEye < 0.4 || rightEye < 0.4)) {
+          livenessPassedRef.current = true;
+          setLivenessPassed(true);
+          setLiveFeedback('✓ Blink detected!');
+          stopAllIntervalsRef.current();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
-          if (avgEye > 0.7) {
-            livenessPassedRef.current = true;
-            setLivenessPassed(true);
-            setLiveFeedback('✓ Blink detected!');
-            stopAllIntervalsRef.current();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setTimeout(() => handleRecognitionRef.current(), 600);
+          if (leftEye > 0.6 && rightEye > 0.6) {
+            eyesWereOpenRef.current = true;
+            setLiveFeedback('Now blink your eyes!');
           } else {
-            setLiveFeedback('Good! Now open your eyes...');
+            setLiveFeedback('Open your eyes fully...');
           }
         }
       } else {
-        // smile challenge
-        if (smile > 0.75) {
-          smileCountRef.current += 1;
-          setLiveFeedback(`Smile detected! (${smileCountRef.current}/2)`);
-          if (smileCountRef.current >= 2) {
-            livenessPassedRef.current = true;
-            setLivenessPassed(true);
-            setLiveFeedback('✓ Smile confirmed!');
-            stopAllIntervalsRef.current();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setTimeout(() => handleRecognitionRef.current(), 600);
-          }
+        // smile challenge — single frame above threshold is enough
+        if (smile > 0.65) {
+          livenessPassedRef.current = true;
+          setLivenessPassed(true);
+          setLiveFeedback('✓ Smile confirmed!');
+          stopAllIntervalsRef.current();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
-          smileCountRef.current = 0;
           setLiveFeedback(smile > 0.4 ? 'Almost! Smile bigger!' : 'Show a big smile!');
         }
       }
@@ -220,7 +215,7 @@ export default function AttendanceScreen({ navigation }: any) {
           setResult({
             type   : 'liveness_fail',
             message: 'Liveness Check Failed',
-            detail : 'Please try again and complete the challenge within 5 seconds.',
+            detail : 'Please try again and complete the challenge within 8 seconds.',
           });
           setStep('result');
         }
@@ -231,7 +226,7 @@ export default function AttendanceScreen({ navigation }: any) {
     const capturedChallenge = challenge;
     captureRef.current = setInterval(
       () => checkLivenessFrame(capturedChallenge),
-      500,
+      300,
     );
 
     return () => stopAllIntervalsRef.current();
@@ -301,6 +296,7 @@ export default function AttendanceScreen({ navigation }: any) {
               ]}>
                 {liveFeedback}
               </Text>
+              {debugInfo ? <Text style={styles.debugInfoText}>{debugInfo}</Text> : null}
             </View>
             <View style={[
               styles.challengeTimer,
@@ -440,6 +436,7 @@ const styles = StyleSheet.create({
   challengeText       : { flex: 1, gap: 4 },
   challengeTitle      : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },
   liveFeedbackText    : { fontSize: 12, color: '#94a3b8' },
+  debugInfoText       : { fontSize: 10, color: '#475569' },
   challengeTimer      : { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', alignItems: 'center', justifyContent: 'center' },
   timerNum            : { color: '#60a5fa', fontSize: 18, fontWeight: '800' },
   livenessLabel       : { fontSize: 11, color: '#334155', textAlign: 'center', letterSpacing: 1 },
