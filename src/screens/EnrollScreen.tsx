@@ -11,6 +11,32 @@ import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
 const REQUIRED_CAPTURES = 5;
 
+const removeOutlierAndAverage = (embeddings: number[][]): number[] => {
+  if (embeddings.length <= 2) {
+    const avg = embeddings[0].map((_, i) =>
+      embeddings.reduce((sum, e) => sum + e[i], 0) / embeddings.length
+    );
+    return l2Normalize(avg);
+  }
+
+  const scores = embeddings.map((emb, i) => {
+    const sims = embeddings
+      .filter((_, j) => j !== i)
+      .map(other => cosineSimilarity(emb, other));
+    return sims.reduce((a, b) => a + b, 0) / sims.length;
+  });
+
+  const worstIdx = scores.indexOf(Math.min(...scores));
+  console.log('Outlier removed: capture', worstIdx + 1, 'score:', scores[worstIdx].toFixed(3));
+  console.log('All scores:', scores.map(s => s.toFixed(3)));
+
+  const good = embeddings.filter((_, i) => i !== worstIdx);
+  const avg  = good[0].map((_, i) =>
+    good.reduce((sum, e) => sum + e[i], 0) / good.length
+  );
+  return l2Normalize(avg);
+};
+
 export default function EnrollScreen({ navigation }: any) {
   const [name, setName]             = useState('');
   const [empId, setEmpId]           = useState('');
@@ -66,10 +92,7 @@ export default function EnrollScreen({ navigation }: any) {
         setStep('processing');
         setStatus('Saving...');
 
-        const avgEmbedding = newEmbeddings[0].map((_, i) =>
-          newEmbeddings.reduce((sum, emb) => sum + emb[i], 0) / newEmbeddings.length
-        );
-        const normalizedAvg = l2Normalize(avgEmbedding);
+        const normalizedAvg = removeOutlierAndAverage(newEmbeddings);
 
         // ── Duplicate face check ──
         const DUPLICATE_THRESHOLD = 0.70;
