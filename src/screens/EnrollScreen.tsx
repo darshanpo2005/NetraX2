@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ScrollView, ActivityIndicator,
+  StyleSheet, Alert, ScrollView, ActivityIndicator, Animated,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
@@ -10,6 +10,14 @@ import { l2Normalize, cosineSimilarity } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
 const REQUIRED_CAPTURES = 5;
+
+const CAPTURE_HINTS = [
+  { label: 'Look straight',       detail: 'Face the camera directly',   icon: '🔵' },
+  { label: 'Turn slightly left',  detail: 'Rotate your head ~15° left', icon: '↙️' },
+  { label: 'Turn slightly right', detail: 'Rotate your head ~15° right',icon: '↘️' },
+  { label: 'Tilt up slightly',    detail: 'Look slightly upward',        icon: '⬆️' },
+  { label: 'Look straight again', detail: 'Final capture — face forward',icon: '✅' },
+];
 
 const removeOutlierAndAverage = (embeddings: number[][]): number[] => {
   if (embeddings.length <= 2) {
@@ -45,8 +53,13 @@ export default function EnrollScreen({ navigation }: any) {
   const [embeddings, setEmbeddings] = useState<number[][]>([]);
   const [status, setStatus]         = useState('');
   const cameraRef        = useRef<Camera>(null);
-  const embeddingsRef    = useRef<number[][]>([]);  // avoids stale-closure bug
-  const isCapturingRef   = useRef(false);            // blocks concurrent taps
+  const embeddingsRef    = useRef<number[][]>([]);
+  const isCapturingRef   = useRef(false);
+
+  // One Animated.Value per dot — bounce on capture
+  const dotAnims = useRef(
+    Array.from({ length: REQUIRED_CAPTURES }, () => new Animated.Value(1))
+  ).current;
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
@@ -58,7 +71,7 @@ export default function EnrollScreen({ navigation }: any) {
     if (exists) { Alert.alert('Error', 'Employee ID already registered'); return; }
     if (!hasPermission) { await requestPermission(); }
     setStep('camera');
-    setStatus('Look straight at camera');
+    setStatus('');
   };
 
   const handleCapture = async () => {
@@ -85,20 +98,26 @@ export default function EnrollScreen({ navigation }: any) {
       embeddingsRef.current = [...embeddingsRef.current, result.embedding];
       const newEmbeddings = embeddingsRef.current;
       setEmbeddings(newEmbeddings);
-      setCaptures(newEmbeddings.length);
-      console.log('Capture', newEmbeddings.length, '/', REQUIRED_CAPTURES);
+      const newCount = newEmbeddings.length;
+      setCaptures(newCount);
+      console.log('Capture', newCount, '/', REQUIRED_CAPTURES);
 
-      if (newEmbeddings.length >= REQUIRED_CAPTURES) {
+      // Bounce animation on the dot just filled
+      const dotIdx = newCount - 1;
+      Animated.sequence([
+        Animated.timing(dotAnims[dotIdx], { toValue: 1.6, duration: 120, useNativeDriver: true }),
+        Animated.spring(dotAnims[dotIdx], { toValue: 1.0, friction: 3, useNativeDriver: true }),
+      ]).start();
+
+      if (newCount >= REQUIRED_CAPTURES) {
         setStep('processing');
         setStatus('Saving...');
 
         const normalizedAvg = removeOutlierAndAverage(newEmbeddings);
 
-        // ── Duplicate face check ──
         const DUPLICATE_THRESHOLD = 0.70;
         const allWorkers = await getAllWorkerEmbeddings();
         console.log('Checking duplicates against', allWorkers.length, 'workers');
-        console.log('First worker embedding length:', allWorkers[0]?.embedding?.length);
         for (const worker of allWorkers) {
           const workerEmbedding: number[] = typeof worker.embedding === 'string'
             ? JSON.parse(worker.embedding)
@@ -110,8 +129,10 @@ export default function EnrollScreen({ navigation }: any) {
             embeddingsRef.current = [];
             setEmbeddings([]);
             setCaptures(0);
+            // Reset dot anims
+            dotAnims.forEach(a => a.setValue(1));
             setStep('camera');
-            setStatus('Duplicate detected. Try again.');
+            setStatus('');
             Alert.alert(
               'Face Already Registered',
               `This face is already registered as "${worker.name}".\nEach person can only be registered once.`,
@@ -134,8 +155,7 @@ export default function EnrollScreen({ navigation }: any) {
         setStep('done');
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        const hints = ['Look straight', 'Turn head left', 'Turn head right', 'Tilt up', 'Tilt down'];
-        setStatus(`✅ ${newEmbeddings.length}/${REQUIRED_CAPTURES} — ${hints[newEmbeddings.length] || 'Good!'}`);
+        setStatus('');
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -145,7 +165,7 @@ export default function EnrollScreen({ navigation }: any) {
     }
   };
 
-  // ── Form ─────────────────────────────────────────────────────────────────
+  // ── Form ──────────────────────────────────────────────────────────────────
   if (step === 'form') return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.icon}>👤</Text>
@@ -174,46 +194,82 @@ export default function EnrollScreen({ navigation }: any) {
     </ScrollView>
   );
 
-  // ── Camera ───────────────────────────────────────────────────────────────
+  // ── Camera ────────────────────────────────────────────────────────────────
   if (step === 'camera') {
     if (!device) return (
       <View style={styles.center}>
         <Text style={styles.permTitle}>No front camera found</Text>
       </View>
     );
+
+    const hint = CAPTURE_HINTS[captures] ?? CAPTURE_HINTS[REQUIRED_CAPTURES - 1];
+    const isProcessing = status === 'Processing...' || status === 'Detecting face...';
+
     return (
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <Camera
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          isActive={true}
-          photo={true}
-        />
+        <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
+          device={device} isActive={true} photo={true} />
         <View style={styles.overlay}>
+          {/* Face guide oval */}
           <View style={styles.faceGuide} />
 
+          {/* Angle instruction card */}
+          <View style={styles.hintCard}>
+            <Text style={styles.hintIcon}>{hint.icon}</Text>
+            <View style={styles.hintTextBlock}>
+              <Text style={styles.hintLabel}>{hint.label}</Text>
+              <Text style={styles.hintDetail}>{hint.detail}</Text>
+            </View>
+            <View style={styles.hintCounter}>
+              <Text style={styles.hintCounterNum}>{captures}</Text>
+              <Text style={styles.hintCounterOf}>/{REQUIRED_CAPTURES}</Text>
+            </View>
+          </View>
+
+          {/* Animated progress dots */}
           <View style={styles.progressRow}>
             {Array.from({ length: REQUIRED_CAPTURES }).map((_, i) => (
-              <View key={i} style={[styles.progressDot,
-                { backgroundColor: i < captures ? '#10b981' : '#334155' }]} />
+              <Animated.View
+                key={i}
+                style={[
+                  styles.progressDot,
+                  { backgroundColor: i < captures ? '#10b981' : i === captures ? '#3b82f6' : '#334155' },
+                  { transform: [{ scale: dotAnims[i] }] },
+                ]}
+              />
             ))}
           </View>
 
-          <Text style={styles.captureCount}>{captures}/{REQUIRED_CAPTURES}</Text>
-          <Text style={styles.captureHint}>{status}</Text>
+          {/* Status text (only shown during processing) */}
+          {(isProcessing || status === 'No face found. Try again.' || status === 'Error. Try again.') ? (
+            <Text style={[
+              styles.captureHint,
+              { color: status.includes('No face') || status.includes('Error') ? '#ef4444' : '#7dd3fc' },
+            ]}>
+              {status}
+            </Text>
+          ) : null}
 
-          <TouchableOpacity style={styles.captureBtn} onPress={handleCapture}>
-            <View style={styles.captureBtnInner} />
+          {/* Capture button */}
+          <TouchableOpacity
+            style={[styles.captureBtn, isProcessing && { opacity: 0.5 }]}
+            onPress={handleCapture}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            {isProcessing
+              ? <ActivityIndicator size="large" color="#fff" />
+              : <View style={styles.captureBtnInner} />
+            }
           </TouchableOpacity>
 
-          <Text style={styles.workerLabel}>{name} — {empId}</Text>
+          <Text style={styles.workerLabel}>{name} · {empId}</Text>
         </View>
       </View>
     );
   }
 
-  // ── Processing ───────────────────────────────────────────────────────────
+  // ── Processing ────────────────────────────────────────────────────────────
   if (step === 'processing') return (
     <View style={styles.center}>
       <ActivityIndicator size="large" color="#7dd3fc" />
@@ -222,7 +278,7 @@ export default function EnrollScreen({ navigation }: any) {
     </View>
   );
 
-  // ── Done ─────────────────────────────────────────────────────────────────
+  // ── Done ──────────────────────────────────────────────────────────────────
   return (
     <View style={styles.center}>
       <Text style={{ fontSize: 72, marginBottom: 16 }}>✅</Text>
@@ -232,10 +288,8 @@ export default function EnrollScreen({ navigation }: any) {
       <Text style={{ color: '#10b981', fontSize: 13, marginTop: 12 }}>
         ✅ Real MobileFaceNet embeddings stored
       </Text>
-      <TouchableOpacity
-        style={[styles.btn, { marginTop: 32, width: '80%' }]}
-        onPress={() => navigation.navigate('Home')}
-      >
+      <TouchableOpacity style={[styles.btn, { marginTop: 32, width: '80%' }]}
+        onPress={() => navigation.navigate('Home')}>
         <Text style={styles.btnText}>Back to Home</Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -244,8 +298,8 @@ export default function EnrollScreen({ navigation }: any) {
           setName(''); setEmpId(''); setStep('form');
           setCaptures(0); setEmbeddings([]); setStatus('');
           embeddingsRef.current = [];
-        }}
-      >
+          dotAnims.forEach(a => a.setValue(1));
+        }}>
         <Text style={styles.btnText}>Register Another</Text>
       </TouchableOpacity>
     </View>
@@ -265,15 +319,27 @@ const styles = StyleSheet.create({
   infoText         : { color: '#94a3b8', fontSize: 13 },
   btn              : { width: '100%', backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   btnText          : { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  overlay          : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 48 },
-  faceGuide        : { position: 'absolute', top: '10%', width: 240, height: 300, borderRadius: 120, borderWidth: 2, borderColor: '#7dd3fc', borderStyle: 'dashed' },
-  progressRow      : { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  progressDot      : { width: 16, height: 16, borderRadius: 8 },
-  captureCount     : { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 4, borderRadius: 20 },
-  captureHint      : { color: '#7dd3fc', fontSize: 14, marginBottom: 24, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, textAlign: 'center' },
+
+  overlay          : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 40 },
+  faceGuide        : { position: 'absolute', top: '8%', width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderColor: '#7dd3fc', borderStyle: 'dashed' },
+
+  hintCard         : { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(2,8,23,0.88)', borderRadius: 18, padding: 14, marginBottom: 18, marginHorizontal: 16, borderWidth: 1, borderColor: '#1e293b', gap: 12, width: '90%' },
+  hintIcon         : { fontSize: 28 },
+  hintTextBlock    : { flex: 1 },
+  hintLabel        : { color: '#f1f5f9', fontSize: 15, fontWeight: '700' },
+  hintDetail       : { color: '#64748b', fontSize: 12, marginTop: 2 },
+  hintCounter      : { flexDirection: 'row', alignItems: 'baseline' },
+  hintCounterNum   : { color: '#3b82f6', fontSize: 22, fontWeight: '800' },
+  hintCounterOf    : { color: '#475569', fontSize: 14, fontWeight: '600' },
+
+  progressRow      : { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  progressDot      : { width: 18, height: 18, borderRadius: 9 },
+
+  captureHint      : { fontSize: 13, marginBottom: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, textAlign: 'center' },
   captureBtn       : { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   captureBtnInner  : { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },
-  workerLabel      : { color: '#64748b', fontSize: 12 },
+  workerLabel      : { color: '#475569', fontSize: 12 },
+
   permTitle        : { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
   processingText   : { color: '#f1f5f9', fontSize: 20, fontWeight: 'bold', marginTop: 24 },
   processingSubtext: { color: '#64748b', fontSize: 14, marginTop: 8 },
