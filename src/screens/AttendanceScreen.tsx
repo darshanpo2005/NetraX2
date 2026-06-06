@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Vibration,
+  StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import * as Haptics from 'expo-haptics';
 import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
@@ -72,7 +73,7 @@ export default function AttendanceScreen({ navigation }: any) {
       const embResult = await extractFaceEmbedding(uri);
 
       if (!embResult.success || !embResult.embedding || !embResult.faceDetected) {
-        Vibration.vibrate([0, 100, 50, 100]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setResult({
           type   : 'no_face',
           message: 'No Face Detected',
@@ -82,6 +83,7 @@ export default function AttendanceScreen({ navigation }: any) {
         return;
       }
 
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setStatusMsg('Matching identity...');
       const workers = await getAllWorkers();
 
@@ -107,7 +109,7 @@ export default function AttendanceScreen({ navigation }: any) {
           synced    : 0,
           location  : 'Field Site',
         });
-        Vibration.vibrate(200);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setResult({
           type   : 'success',
           name   : match.workerName!,
@@ -116,7 +118,7 @@ export default function AttendanceScreen({ navigation }: any) {
           detail : 'Attendance logged successfully.',
         });
       } else {
-        Vibration.vibrate([0, 100, 50, 100, 50, 100]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setResult({
           type   : 'no_match',
           sim    : match.similarity,

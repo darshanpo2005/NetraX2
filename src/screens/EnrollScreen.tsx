@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import * as Haptics from 'expo-haptics';
 import { addWorker, workerExists } from '../services/DatabaseService';
 import { l2Normalize } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
@@ -43,16 +44,21 @@ export default function EnrollScreen({ navigation }: any) {
       const result = await extractFaceEmbedding(uri);
 
       if (!result.success || !result.embedding) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('No face detected', result.error || 'Ensure your face is clearly visible');
         setStatus('No face found. Try again.');
         return;
       }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       const newEmbeddings = [...embeddings, result.embedding];
       setEmbeddings(newEmbeddings);
       setCaptures(newEmbeddings.length);
 
       if (newEmbeddings.length >= REQUIRED_CAPTURES) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setStep('processing');
         setStatus('Saving...');
 
@@ -70,6 +76,7 @@ export default function EnrollScreen({ navigation }: any) {
         });
         setStep('done');
       } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         const hints = ['Look straight', 'Turn head left', 'Turn head right', 'Tilt up', 'Tilt down'];
         setStatus(`✅ ${newEmbeddings.length}/${REQUIRED_CAPTURES} — ${hints[newEmbeddings.length] || 'Good!'}`);
       }
