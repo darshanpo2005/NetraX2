@@ -156,9 +156,9 @@ export default function AttendanceScreen({ navigation }: any) {
       setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
       const minEye = Math.min(leftEye, rightEye);
-      if (minEye > 0.7) eyesWereOpenRef.current = true;
+      if (minEye > 0.6) eyesWereOpenRef.current = true;
 
-      if (eyesWereOpenRef.current && minEye < 0.4) {
+      if (eyesWereOpenRef.current && minEye < 0.5) {
         livenessPassedRef.current = true;
         setLivenessPassed(true);
         setLiveFeedback('✓ Blink detected!');
@@ -196,7 +196,7 @@ export default function AttendanceScreen({ navigation }: any) {
       }
     }, 1000);
 
-    captureRef.current = setInterval(checkLivenessFrame, 150);
+    captureRef.current = setInterval(checkLivenessFrame, 80);
 
     return () => stopAllIntervalsRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
