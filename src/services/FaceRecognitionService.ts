@@ -140,17 +140,26 @@ const DST_LANDMARKS: [number, number][] = [
 ];
 
 // Extract 5 landmark {x,y} positions from an ML Kit face result.
-// @react-native-ml-kit/face-detection exposes landmarks as direct properties,
-// not an array — e.g. face.leftEyePosition, face.noseBasePosition, etc.
 function extractLandmarks(face: any): [number, number][] | null {
   console.log('Face keys:', Object.keys(face));
-  console.log('leftEyePosition:', face.leftEyePosition);
+  console.log('Landmarks:', JSON.stringify(face.landmarks));
 
-  const left   = face.leftEyePosition;
-  const right  = face.rightEyePosition;
-  const nose   = face.noseBasePosition;
-  const lMouth = face.leftMouthPosition;
-  const rMouth = face.rightMouthPosition;
+  const lms: any[] = face.landmarks ?? [];
+  if (!Array.isArray(lms) || lms.length === 0) return null;
+
+  // Normalise type strings to lowercase so we match both 'LEFT_EYE' and 'leftEye'.
+  const lmMap: Record<string, { x: number; y: number }> = {};
+  for (const lm of lms) {
+    const key = String(lm.type ?? '').toLowerCase().replace('_', '');
+    lmMap[key] = lm.position;
+  }
+
+  // Accept both camelCase and UPPER_SNAKE variants after normalisation.
+  const left   = lmMap['lefteye'];
+  const right  = lmMap['righteye'];
+  const nose   = lmMap['nosebase'];
+  const lMouth = lmMap['leftmouth'];
+  const rMouth = lmMap['rightmouth'];
 
   if (!left || !right || !nose || !lMouth || !rMouth) return null;
 
