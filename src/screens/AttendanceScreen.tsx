@@ -10,7 +10,7 @@ import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
 
-const CHALLENGE    = { text: 'Blink your eyes', emoji: '😉', instruction: 'Blink slowly once' };
+const CHALLENGE     = { text: 'Blink your eyes', emoji: '😉', instruction: 'Blink slowly once' };
 const LIVENESS_SECS = 12;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
@@ -23,11 +23,11 @@ type ResultType = {
 };
 
 export default function AttendanceScreen({ navigation }: any) {
-  const [step, setStep]               = useState<ScanStep>('liveness');
-  const [timeLeft, setTimeLeft]       = useState(LIVENESS_SECS);
-  const [result, setResult]           = useState<ResultType | null>(null);
-  const [statusMsg, setStatusMsg]     = useState('');
-  const [liveFeedback, setLiveFeedback] = useState('Center your face in the oval');
+  const [step, setStep]                     = useState<ScanStep>('liveness');
+  const [timeLeft, setTimeLeft]             = useState(LIVENESS_SECS);
+  const [result, setResult]                 = useState<ResultType | null>(null);
+  const [statusMsg, setStatusMsg]           = useState('');
+  const [liveFeedback, setLiveFeedback]     = useState('Center your face in the oval');
   const [livenessPassed, setLivenessPassed] = useState(false);
   const [faceDetected, setFaceDetected]     = useState(false);
   const [debugInfo, setDebugInfo]           = useState('');
@@ -35,29 +35,19 @@ export default function AttendanceScreen({ navigation }: any) {
   const cameraRef            = useRef<Camera>(null);
   const timerRef             = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const captureRef           = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const recognitionTimeoutRef= useRef<ReturnType<typeof setTimeout>  | undefined>(undefined);
   const eyesWereOpenRef      = useRef(false);
   const minEyeSeenRef        = useRef(1.0);
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
   // ─── Animations ──────────────────────────────────────────────────────────
-  // Oval border colour: 0=blue, 1=green (JS driver required for colour interp)
   const ovalColorAnim = useRef(new Animated.Value(0)).current;
-  // Pulsing ring: 0→1 loop (native driver OK for scale/opacity)
   const pulseAnim     = useRef(new Animated.Value(0)).current;
   const pulseLoopRef  = useRef<Animated.CompositeAnimation | null>(null);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
-
-  // Start/stop pulse loop
-  useEffect(() => {
-    pulseLoopRef.current = Animated.loop(
-      Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true })
-    );
-    pulseLoopRef.current.start();
-    return () => { pulseLoopRef.current?.stop(); };
-  }, []);
 
   // Animate oval colour whenever face detection or pass state changes
   useEffect(() => {
@@ -81,14 +71,17 @@ export default function AttendanceScreen({ navigation }: any) {
     outputRange: [0.45, 0.15, 0],
   });
 
-  const stopAllIntervals = useCallback(() => {
-    if (timerRef.current)   { clearInterval(timerRef.current);   timerRef.current   = undefined; }
-    if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = undefined; }
+  // ─── Interval / timeout management ───────────────────────────────────────
+  const stopAll = useCallback(() => {
+    if (timerRef.current)             { clearInterval(timerRef.current);             timerRef.current              = undefined; }
+    if (captureRef.current)           { clearInterval(captureRef.current);           captureRef.current            = undefined; }
+    if (recognitionTimeoutRef.current){ clearTimeout(recognitionTimeoutRef.current); recognitionTimeoutRef.current = undefined; }
   }, []);
 
-  const stopAllIntervalsRef = useRef(stopAllIntervals);
-  stopAllIntervalsRef.current = stopAllIntervals;
+  const stopAllRef = useRef(stopAll);
+  stopAllRef.current = stopAll;
 
+  // ─── Recognition ─────────────────────────────────────────────────────────
   const handleRecognition = useCallback(async () => {
     pulseLoopRef.current?.stop();
     setStep('scanning');
@@ -156,6 +149,7 @@ export default function AttendanceScreen({ navigation }: any) {
   const handleRecognitionRef = useRef(handleRecognition);
   handleRecognitionRef.current = handleRecognition;
 
+  // ─── Liveness frame check ─────────────────────────────────────────────────
   const checkLivenessFrame = useCallback(async () => {
     if (livenessPassedRef.current || captureInProgressRef.current) return;
     if (!cameraRef.current) return;
@@ -179,9 +173,9 @@ export default function AttendanceScreen({ navigation }: any) {
       }
 
       setFaceDetected(true);
-      const face    = faces[0];
-      const leftEye = face.leftEyeOpenProbability  ?? 1;
-      const rightEye= face.rightEyeOpenProbability ?? 1;
+      const face     = faces[0];
+      const leftEye  = face.leftEyeOpenProbability  ?? 1;
+      const rightEye = face.rightEyeOpenProbability ?? 1;
 
       setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
@@ -197,10 +191,11 @@ export default function AttendanceScreen({ navigation }: any) {
           livenessPassedRef.current = true;
           setLivenessPassed(true);
           setLiveFeedback('✓ Blink detected!');
-          stopAllIntervalsRef.current();
+          stopAllRef.current();
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => handleRecognitionRef.current(), 600);
+          // Track this timeout so retry can cancel it if tapped quickly
+          recognitionTimeoutRef.current = setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
           setLiveFeedback('Blink slowly once');
         }
@@ -214,15 +209,33 @@ export default function AttendanceScreen({ navigation }: any) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!hasPermission) requestPermission();
+  const checkLivenessFrameRef = useRef(checkLivenessFrame);
+  checkLivenessFrameRef.current = checkLivenessFrame;
 
+  // ─── Start liveness session ───────────────────────────────────────────────
+  // Extracted so both initial mount and handleRetry use the same logic.
+  const startLiveness = useCallback(() => {
+    // Reset liveness refs
+    eyesWereOpenRef.current      = false;
+    minEyeSeenRef.current        = 1.0;
+    livenessPassedRef.current    = false;
+    captureInProgressRef.current = false;
+
+    // Restart pulse animation
+    pulseLoopRef.current?.stop();
+    pulseAnim.setValue(0);
+    pulseLoopRef.current = Animated.loop(
+      Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true })
+    );
+    pulseLoopRef.current.start();
+
+    // Start countdown timer
     let t = LIVENESS_SECS;
     timerRef.current = setInterval(() => {
       t--;
       setTimeLeft(t);
       if (t <= 0) {
-        stopAllIntervalsRef.current();
+        stopAllRef.current();
         if (!livenessPassedRef.current) {
           setResult({ type: 'liveness_fail', message: 'Liveness Check Failed', detail: 'Please try again and complete the challenge within 12 seconds.' });
           setStep('result');
@@ -230,8 +243,37 @@ export default function AttendanceScreen({ navigation }: any) {
       }
     }, 1000);
 
-    captureRef.current = setInterval(checkLivenessFrame, 80);
-    return () => stopAllIntervalsRef.current();
+    // Start liveness frame capture loop
+    captureRef.current = setInterval(() => checkLivenessFrameRef.current(), 80);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Try Again ────────────────────────────────────────────────────────────
+  const handleRetry = useCallback(() => {
+    // Cancel everything currently running
+    stopAllRef.current();
+
+    // Reset all state
+    setResult(null);
+    setStep('liveness');
+    setTimeLeft(LIVENESS_SECS);
+    setLiveFeedback('Center your face in the oval');
+    setLivenessPassed(false);
+    setFaceDetected(false);
+    setDebugInfo('');
+    setStatusMsg('');
+
+    // Reset oval colour animation
+    ovalColorAnim.setValue(0);
+
+    // Restart liveness session (resets refs + starts intervals)
+    startLiveness();
+  }, [startLiveness]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Mount / unmount ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!hasPermission) requestPermission();
+    startLiveness();
+    return () => stopAllRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Permission guard ─────────────────────────────────────────────────────
@@ -254,8 +296,7 @@ export default function AttendanceScreen({ navigation }: any) {
 
   // ─── Liveness step ────────────────────────────────────────────────────────
   if (step === 'liveness') {
-    const timerPct = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
-    // Timer urgency colour
+    const timerPct  = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
     const timerColor = timeLeft <= 3 ? '#ef4444' : timeLeft <= 6 ? '#f59e0b' : '#3b82f6';
 
     return (
@@ -267,7 +308,6 @@ export default function AttendanceScreen({ navigation }: any) {
         {/* Face oval + pulse ring */}
         <View style={styles.faceOvalContainer}>
           <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-            {/* Pulsing ring behind oval */}
             {!livenessPassed && (
               <Animated.View style={[
                 styles.pulseRing,
@@ -275,7 +315,6 @@ export default function AttendanceScreen({ navigation }: any) {
                   borderColor: faceDetected ? '#10b981' : '#3b82f6' },
               ]} />
             )}
-            {/* Animated oval */}
             <Animated.View style={[
               styles.faceOval,
               { borderColor: ovalBorderColor },
@@ -287,7 +326,6 @@ export default function AttendanceScreen({ navigation }: any) {
               </View>
             )}
           </View>
-          {/* Face detection status */}
           <View style={[styles.faceStatusPill, {
             backgroundColor: livenessPassed ? 'rgba(16,185,129,0.15)' :
                               faceDetected   ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
@@ -304,7 +342,6 @@ export default function AttendanceScreen({ navigation }: any) {
 
         {/* Challenge card */}
         <View style={styles.challengeCard}>
-          {/* Timer progress bar */}
           <View style={styles.timerRow}>
             <View style={[styles.timerBar, { width: timerPct, backgroundColor: livenessPassed ? '#10b981' : timerColor }]} />
           </View>
@@ -318,9 +355,8 @@ export default function AttendanceScreen({ navigation }: any) {
               </Text>
               {debugInfo ? <Text style={styles.debugInfoText}>{debugInfo}</Text> : null}
             </View>
-            {/* Countdown circle */}
             <View style={[styles.challengeTimer, {
-              borderColor : livenessPassed ? 'rgba(16,185,129,0.3)' : `${timerColor}44`,
+              borderColor    : livenessPassed ? 'rgba(16,185,129,0.3)' : `${timerColor}44`,
               backgroundColor: livenessPassed ? 'rgba(16,185,129,0.15)' : `${timerColor}18`,
             }]}>
               <Text style={[styles.timerNum, { color: livenessPassed ? '#10b981' : timerColor }]}>
@@ -423,7 +459,7 @@ export default function AttendanceScreen({ navigation }: any) {
           )}
         </View>
 
-        <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.navigate('Attendance')} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
           <Text style={styles.retryBtnText}>Try Again</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.homeBtn} onPress={() => navigation.navigate('Home')} activeOpacity={0.8}>
