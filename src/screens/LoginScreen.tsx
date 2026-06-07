@@ -112,12 +112,6 @@ export default function LoginScreen({ navigation }: any) {
         ))}
       </View>
 
-      {/* Hint */}
-      <View style={styles.hintContainer}>
-        <View style={styles.hintDot} />
-        <Text style={styles.hint}>Demo PIN: 1234</Text>
-      </View>
-
       {/* Security badge */}
       <View style={styles.securityBadge}>
         <Text style={styles.securityText}>🔒  256-BIT ENCRYPTED  ·  OFFLINE MODE</Text>
@@ -148,9 +142,6 @@ const styles = StyleSheet.create({
   keyEmpty       : { backgroundColor: 'transparent', borderColor: 'transparent' },
   keyText        : { fontSize: 26, fontWeight: '600', color: '#f1f5f9' },
   keyDelete      : { fontSize: 22, color: '#94a3b8' },
-  hintContainer  : { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  hintDot        : { width: 6, height: 6, borderRadius: 3, backgroundColor: '#3b82f6' },
-  hint           : { color: '#334155', fontSize: 12, letterSpacing: 0.5 },
   securityBadge  : { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(15,23,42,0.8)', borderWidth: 1, borderColor: '#1e293b' },
   securityText   : { color: '#334155', fontSize: 10, letterSpacing: 2, fontWeight: '600' },
 });

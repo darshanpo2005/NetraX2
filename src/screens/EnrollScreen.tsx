@@ -47,7 +47,6 @@ export default function EnrollScreen({ navigation }: any) {
   const [empId, setEmpId]           = useState('');
   const [step, setStep]             = useState<'form' | 'camera' | 'processing' | 'done'>('form');
   const [captures, setCaptures]     = useState(0);
-  const [embeddings, setEmbeddings] = useState<number[][]>([]);
   const [status, setStatus]         = useState('');
   const cameraRef        = useRef<Camera>(null);
   const embeddingsRef    = useRef<number[][]>([]);
@@ -93,9 +92,7 @@ export default function EnrollScreen({ navigation }: any) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       embeddingsRef.current = [...embeddingsRef.current, result.embedding];
-      const newEmbeddings = embeddingsRef.current;
-      setEmbeddings(newEmbeddings);
-      const newCount = newEmbeddings.length;
+      const newCount = embeddingsRef.current.length;
       setCaptures(newCount);
 
       // Bounce animation on the dot just filled
@@ -109,7 +106,7 @@ export default function EnrollScreen({ navigation }: any) {
         setStep('processing');
         setStatus('Saving...');
 
-        const normalizedAvg = removeOutlierAndAverage(newEmbeddings);
+        const normalizedAvg = removeOutlierAndAverage(embeddingsRef.current);
 
         const DUPLICATE_THRESHOLD = 0.70;
         const allWorkers = await getAllWorkerEmbeddings();
@@ -121,7 +118,6 @@ export default function EnrollScreen({ navigation }: any) {
           if (sim > DUPLICATE_THRESHOLD) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             embeddingsRef.current = [];
-            setEmbeddings([]);
             setCaptures(0);
             // Reset dot anims
             dotAnims.forEach(a => a.setValue(1));
@@ -290,7 +286,7 @@ export default function EnrollScreen({ navigation }: any) {
         style={[styles.btn, { marginTop: 12, width: '80%', backgroundColor: '#1e293b' }]}
         onPress={() => {
           setName(''); setEmpId(''); setStep('form');
-          setCaptures(0); setEmbeddings([]); setStatus('');
+          setCaptures(0); setStatus('');
           embeddingsRef.current = [];
           dotAnims.forEach(a => a.setValue(1));
         }}>

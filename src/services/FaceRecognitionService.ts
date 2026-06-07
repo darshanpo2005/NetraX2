@@ -379,6 +379,3 @@ export const extractFaceEmbedding = async (
   }
 };
 
-export const checkLiveness = (_base64: string): { isLive: boolean; score: number } => {
-  return { isLive: true, score: 1.0 };
-};
