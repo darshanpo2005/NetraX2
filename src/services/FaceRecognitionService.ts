@@ -303,35 +303,32 @@ export const extractFaceEmbedding = async (
     if (landmarks) {
       console.log('Using alignment');
 
-      // Crop a generous region around the face landmarks for the warp source.
-      // 1× face-span padding on each side ensures the inverse-warped source
-      // coords stay within the decoded region for typical scale factors.
-      const lmXs = landmarks.map(l => l[0]);
-      const lmYs = landmarks.map(l => l[1]);
-      const minX = Math.min(...lmXs), maxX = Math.max(...lmXs);
-      const minY = Math.min(...lmYs), maxY = Math.max(...lmYs);
-      const pad  = Math.max(maxX - minX, maxY - minY);
-
-      const cropX1 = Math.max(0, Math.floor(minX - pad));
-      const cropY1 = Math.max(0, Math.floor(minY - pad));
-      const cropX2 = Math.min(imgW, Math.ceil(maxX + pad));
-      const cropY2 = Math.min(imgH, Math.ceil(maxY + pad));
-      const cropW  = cropX2 - cropX1;
-      const cropH  = cropY2 - cropY1;
+      // Crop the face bbox then resize to 224×224 before PNG decode.
+      // Decoding 224×224 instead of the full-res crop reduces JS pixel
+      // processing by ~90% (main bottleneck was the pure-JS PNG decoder).
+      const THUMB = 224;
+      const crop  = safeCrop(face.frame, imgW, imgH);
 
       const cropped = await ImageManipulator.manipulateAsync(
         imageUri,
-        [{ crop: { originX: cropX1, originY: cropY1, width: cropW, height: cropH } }],
+        [
+          { crop: { originX: crop.originX, originY: crop.originY, width: crop.width, height: crop.height } },
+          { resize: { width: THUMB, height: THUMB } },
+        ],
         { format: ImageManipulator.SaveFormat.PNG, base64: true }
       );
 
       if (cropped.base64) {
         const srcRgb = decodePngToRgb(cropped.base64);
         if (srcRgb) {
-          // Shift landmarks into crop-local coordinates
-          const localLm: [number, number][] = landmarks.map(([x, y]) => [x - cropX1, y - cropY1]);
+          // Scale landmarks from original-image coords → 224×224 crop-local coords
+          const scaleX = THUMB / crop.width, scaleY = THUMB / crop.height;
+          const localLm: [number, number][] = landmarks.map(([x, y]) => [
+            (x - crop.originX) * scaleX,
+            (y - crop.originY) * scaleY,
+          ]);
           const [a, b, tx, ty] = computeSimilarityTransform(localLm, DST_LANDMARKS);
-          rgb = warpAffine(srcRgb, cropW, cropH, a, b, tx, ty);
+          rgb = warpAffine(srcRgb, THUMB, THUMB, a, b, tx, ty);
         }
       }
     }
