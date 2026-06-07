@@ -10,6 +10,7 @@ import AttendanceScreen from './src/screens/AttendanceScreen';
 import WorkerListScreen from './src/screens/WorkerListScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import AttendanceReportScreen from './src/screens/AttendanceReportScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
 
 const Stack = createStackNavigator();
 
@@ -34,6 +35,7 @@ export default function App() {
         <Stack.Screen name="WorkerList"  component={WorkerListScreen} options={{ title: 'Workforce' }} />
         <Stack.Screen name="Admin"       component={AdminScreen}           options={{ title: 'Admin Console' }} />
         <Stack.Screen name="Reports"     component={AttendanceReportScreen} options={{ title: 'Attendance Reports' }} />
+        <Stack.Screen name="Dashboard"   component={DashboardScreen}        options={{ title: 'Dashboard' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

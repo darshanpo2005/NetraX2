@@ -224,6 +224,118 @@ export const getAttendanceRecords = async (
   }));
 };
 
+// ─── Dashboard queries ────────────────────────────────────────────────────────
+
+export interface TodayWorker {
+  workerId: string;
+  workerName: string;
+  lastSeen: number; // timestamp of most-recent attendance today
+}
+
+/** Workers who have at least one attendance log today. */
+export const getTodayAttendance = async (): Promise<TodayWorker[]> => {
+  const database = getDb();
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const rows = await database.getAllAsync(
+    `SELECT worker_id, worker_name, MAX(timestamp) AS last_seen
+       FROM attendance_log
+      WHERE timestamp >= ?
+      GROUP BY worker_id, worker_name
+      ORDER BY last_seen DESC`,
+    [startOfDay.getTime()]
+  ) as any[];
+  return rows.map(r => ({
+    workerId: r.worker_id,
+    workerName: r.worker_name,
+    lastSeen: r.last_seen,
+  }));
+};
+
+export interface DayCount { label: string; count: number; date: string }
+
+/** Attendance count for each of the last 7 days (oldest → newest). */
+export const getWeeklyAttendance = async (): Promise<DayCount[]> => {
+  const database = getDb();
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const result: DayCount[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const start = d.getTime();
+    const end   = start + 86_400_000;
+    const row = await database.getFirstAsync(
+      `SELECT COUNT(DISTINCT worker_id) AS cnt
+         FROM attendance_log WHERE timestamp >= ? AND timestamp < ?`,
+      [start, end]
+    ) as any;
+    result.push({
+      label: DAY_LABELS[d.getDay()],
+      count: row?.cnt ?? 0,
+      date : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    });
+  }
+  return result;
+};
+
+export interface WorkerStreak {
+  workerId: string;
+  workerName: string;
+  streak: number;
+  lastSeen: number | null;
+  presentToday: boolean;
+}
+
+/** Consecutive-day attendance streak for every enrolled worker. */
+export const getWorkerStreaks = async (): Promise<WorkerStreak[]> => {
+  const database = getDb();
+  const workers  = await getAllWorkers();
+  const today    = new Date(); today.setHours(0, 0, 0, 0);
+
+  const streaks: WorkerStreak[] = [];
+
+  for (const w of workers) {
+    // Distinct calendar days this worker attended, newest first
+    const rows = await database.getAllAsync(
+      `SELECT DISTINCT CAST(timestamp / 86400000 AS INTEGER) AS day_idx,
+              MAX(timestamp) AS last_seen
+         FROM attendance_log
+        WHERE worker_id = ?
+        GROUP BY day_idx
+        ORDER BY day_idx DESC`,
+      [w.id]
+    ) as any[];
+
+    const presentToday = rows.length > 0 &&
+      rows[0].day_idx === Math.floor(today.getTime() / 86_400_000);
+
+    let streak = 0;
+    let expected = Math.floor(today.getTime() / 86_400_000);
+    // If absent today, streak only counts if they were present yesterday
+    if (!presentToday) expected -= 1;
+
+    for (const row of rows) {
+      if (row.day_idx === expected) { streak++; expected--; }
+      else break;
+    }
+
+    streaks.push({
+      workerId: w.id,
+      workerName: w.name,
+      streak,
+      lastSeen: rows[0]?.last_seen ?? null,
+      presentToday,
+    });
+  }
+
+  // Present today first, then by streak desc
+  return streaks.sort((a, b) =>
+    Number(b.presentToday) - Number(a.presentToday) || b.streak - a.streak
+  );
+};
+
 export const getAllWorkerEmbeddings = async (): Promise<Array<{
   id: string;
   name: string;
