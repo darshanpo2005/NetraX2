@@ -25,17 +25,22 @@ export default function DashboardScreen() {
   const [streaks, setStreaks]       = useState<WorkerStreak[]>([]);
 
   const load = async () => {
-    const [total, todayRows, week, streakRows] = await Promise.all([
-      getWorkerCount(),
-      getTodayAttendance(),
-      getWeeklyAttendance(),
-      getWorkerStreaks(),
-    ]);
-    setTotal(total);
-    setPresent(todayRows.length);
-    setWeekData(week);
-    setStreaks(streakRows);
-    setLoading(false);
+    try {
+      const [total, todayRows, week, streakRows] = await Promise.all([
+        getWorkerCount(),
+        getTodayAttendance(),
+        getWeeklyAttendance(),
+        getWorkerStreaks(),
+      ]);
+      setTotal(total);
+      setPresent(todayRows.length);
+      setWeekData(week);
+      setStreaks(streakRows);
+    } catch {
+      // DB errors surface as empty state rather than crash
+    } finally {
+      setLoading(false);
+    }
   };
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, []));

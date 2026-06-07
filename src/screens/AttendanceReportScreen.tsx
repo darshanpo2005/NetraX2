@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Alert, Dimensions, Modal,
@@ -171,7 +171,12 @@ export default function AttendanceReportScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { loadAll(fromDate, toDate); }, []));
+  const fromDateRef = useRef(fromDate);
+  const toDateRef   = useRef(toDate);
+  fromDateRef.current = fromDate;
+  toDateRef.current   = toDate;
+
+  useFocusEffect(useCallback(() => { loadAll(fromDateRef.current, toDateRef.current); }, []));
 
   const applyRange = () => loadAll(fromDate, toDate);
 

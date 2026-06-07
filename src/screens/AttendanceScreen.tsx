@@ -183,7 +183,6 @@ export default function AttendanceScreen({ navigation }: any) {
       const leftEye = face.leftEyeOpenProbability  ?? 1;
       const rightEye= face.rightEyeOpenProbability ?? 1;
 
-      console.log('Eye L:', leftEye.toFixed(2), 'R:', rightEye.toFixed(2));
       setDebugInfo(`Eyes: L${leftEye.toFixed(2)} R${rightEye.toFixed(2)}`);
 
       const minEye = Math.min(leftEye, rightEye);

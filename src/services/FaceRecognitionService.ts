@@ -153,14 +153,9 @@ function extractLandmarks(face: any): [number, number][] | null {
   const rightMouth = lm.mouthRight?.position;
 
   if (!leftEye || !rightEye || !nose || !leftMouth || !rightMouth) {
-    console.log('Missing landmarks:', {
-      leftEye: !!leftEye, rightEye: !!rightEye, nose: !!nose,
-      leftMouth: !!leftMouth, rightMouth: !!rightMouth,
-    });
     return null;
   }
 
-  console.log('Landmarks extracted successfully');
   return [
     [leftEye.x,    leftEye.y],
     [rightEye.x,   rightEye.y],
@@ -301,7 +296,6 @@ export const extractFaceEmbedding = async (
     let rgb: Uint8Array | null = null;
 
     if (landmarks) {
-      console.log('Using alignment');
 
       // Crop a generous region around the face landmarks for the warp source.
       // 1× face-span padding on each side ensures the inverse-warped source
@@ -338,7 +332,6 @@ export const extractFaceEmbedding = async (
 
     // ── 4. Fallback: bbox crop + resize ───────────────────────────────────
     if (!rgb) {
-      console.log('Using fallback');
       const crop = safeCrop(face.frame, imgW, imgH);
       const processed = await ImageManipulator.manipulateAsync(
         imageUri,

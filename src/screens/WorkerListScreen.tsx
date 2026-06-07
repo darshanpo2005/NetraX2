@@ -9,7 +9,7 @@ export default function WorkerListScreen({ navigation }: any) {
   const [workers, setWorkers] = useState<Worker[]>([]);
 
   useFocusEffect(useCallback(() => {
-    getAllWorkers().then(setWorkers);
+    getAllWorkers().then(setWorkers).catch(() => setWorkers([]));
   }, []));
 
   const handleDelete = (worker: Worker) => {

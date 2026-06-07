@@ -384,7 +384,6 @@ export const getAllWorkerEmbeddings = async (): Promise<Array<{
   try {
     const db = getDb();
     const result = await db.getAllAsync('SELECT id, name, embedding FROM workers') as any[];
-    console.log('getAllWorkerEmbeddings: found', result.length, 'workers');
     return result.map((r: any) => ({
       id: r.id,
       name: r.name,

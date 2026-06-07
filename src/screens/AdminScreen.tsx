@@ -11,13 +11,17 @@ export default function AdminScreen() {
   const [online, setOnline] = useState(false);
 
   const loadData = async () => {
-    const [l, w, t, o] = await Promise.all([
-      getAttendanceLogs(15),
-      getWorkerCount(),
-      getTodayAttendanceCount(),
-      isOnline(),
-    ]);
-    setLogs(l); setStats({ workers: w, today: t }); setOnline(o);
+    try {
+      const [l, w, t, o] = await Promise.all([
+        getAttendanceLogs(15),
+        getWorkerCount(),
+        getTodayAttendanceCount(),
+        isOnline(),
+      ]);
+      setLogs(l); setStats({ workers: w, today: t }); setOnline(o);
+    } catch {
+      // ignore DB errors, keep showing previous state
+    }
   };
 
   useEffect(() => { loadData(); }, []);

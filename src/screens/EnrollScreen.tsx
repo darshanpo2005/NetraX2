@@ -35,9 +35,6 @@ const removeOutlierAndAverage = (embeddings: number[][]): number[] => {
   });
 
   const worstIdx = scores.indexOf(Math.min(...scores));
-  console.log('Outlier removed: capture', worstIdx + 1, 'score:', scores[worstIdx].toFixed(3));
-  console.log('All scores:', scores.map(s => s.toFixed(3)));
-
   const good = embeddings.filter((_, i) => i !== worstIdx);
   const avg  = good[0].map((_, i) =>
     good.reduce((sum, e) => sum + e[i], 0) / good.length
@@ -100,7 +97,6 @@ export default function EnrollScreen({ navigation }: any) {
       setEmbeddings(newEmbeddings);
       const newCount = newEmbeddings.length;
       setCaptures(newCount);
-      console.log('Capture', newCount, '/', REQUIRED_CAPTURES);
 
       // Bounce animation on the dot just filled
       const dotIdx = newCount - 1;
@@ -117,13 +113,11 @@ export default function EnrollScreen({ navigation }: any) {
 
         const DUPLICATE_THRESHOLD = 0.70;
         const allWorkers = await getAllWorkerEmbeddings();
-        console.log('Checking duplicates against', allWorkers.length, 'workers');
         for (const worker of allWorkers) {
           const workerEmbedding: number[] = typeof worker.embedding === 'string'
             ? JSON.parse(worker.embedding)
             : worker.embedding;
           const sim = cosineSimilarity(normalizedAvg, workerEmbedding);
-          console.log(`Similarity with ${worker.name}: ${sim}`);
           if (sim > DUPLICATE_THRESHOLD) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             embeddingsRef.current = [];
