@@ -303,32 +303,29 @@ export const extractFaceEmbedding = async (
     if (landmarks) {
       console.log('Using alignment');
 
-      // Crop the face bbox then resize to 224×224 before PNG decode.
-      // Decoding 224×224 instead of the full-res crop reduces JS pixel
-      // processing by ~90% (main bottleneck was the pure-JS PNG decoder).
-      const THUMB = 224;
-      const crop  = safeCrop(face.frame, imgW, imgH);
+      // Crop tightly to the face bbox (20% padding) with ImageManipulator —
+      // native crop is fast and gives a ~300-400px region instead of the full
+      // 4000px image. No resize, so landmark coords need only a crop-origin
+      // subtraction (no scaling = no accuracy loss).
+      // compress:0.3 reduces PNG zlib work at encode time for a small extra gain.
+      const crop = safeCrop(face.frame, imgW, imgH, 0.20);
 
       const cropped = await ImageManipulator.manipulateAsync(
         imageUri,
-        [
-          { crop: { originX: crop.originX, originY: crop.originY, width: crop.width, height: crop.height } },
-          { resize: { width: THUMB, height: THUMB } },
-        ],
-        { format: ImageManipulator.SaveFormat.PNG, base64: true }
+        [{ crop: { originX: crop.originX, originY: crop.originY, width: crop.width, height: crop.height } }],
+        { format: ImageManipulator.SaveFormat.PNG, base64: true, compress: 0.3 }
       );
 
       if (cropped.base64) {
         const srcRgb = decodePngToRgb(cropped.base64);
         if (srcRgb) {
-          // Scale landmarks from original-image coords → 224×224 crop-local coords
-          const scaleX = THUMB / crop.width, scaleY = THUMB / crop.height;
+          // Shift landmarks into crop-local coords — no scaling required.
           const localLm: [number, number][] = landmarks.map(([x, y]) => [
-            (x - crop.originX) * scaleX,
-            (y - crop.originY) * scaleY,
+            x - crop.originX,
+            y - crop.originY,
           ]);
           const [a, b, tx, ty] = computeSimilarityTransform(localLm, DST_LANDMARKS);
-          rgb = warpAffine(srcRgb, THUMB, THUMB, a, b, tx, ty);
+          rgb = warpAffine(srcRgb, crop.width, crop.height, a, b, tx, ty);
         }
       }
     }
