@@ -139,16 +139,28 @@ const DST_LANDMARKS: [number, number][] = [
   [70.7299, 92.2041], // right mouth
 ];
 
-const LANDMARK_TYPES = ['leftEye', 'rightEye', 'noseBase', 'leftMouth', 'rightMouth'] as const;
-
 // Extract 5 landmark {x,y} positions from an ML Kit face result.
+// @react-native-ml-kit/face-detection exposes landmarks as direct properties,
+// not an array — e.g. face.leftEyePosition, face.noseBasePosition, etc.
 function extractLandmarks(face: any): [number, number][] | null {
-  const lmMap = Object.fromEntries(
-    (face.landmarks ?? []).map((l: any) => [l.type, l.position])
-  );
-  const pts = LANDMARK_TYPES.map(t => lmMap[t]);
-  if (pts.some(p => !p)) return null;
-  return pts.map(p => [p.x as number, p.y as number]);
+  console.log('Face keys:', Object.keys(face));
+  console.log('leftEyePosition:', face.leftEyePosition);
+
+  const left   = face.leftEyePosition;
+  const right  = face.rightEyePosition;
+  const nose   = face.noseBasePosition;
+  const lMouth = face.leftMouthPosition;
+  const rMouth = face.rightMouthPosition;
+
+  if (!left || !right || !nose || !lMouth || !rMouth) return null;
+
+  return [
+    [left.x,   left.y],
+    [right.x,  right.y],
+    [nose.x,   nose.y],
+    [lMouth.x, lMouth.y],
+    [rMouth.x, rMouth.y],
+  ];
 }
 
 // Compute a 4-DOF similarity transform (scale + rotation + translation) from
