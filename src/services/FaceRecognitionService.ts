@@ -140,35 +140,33 @@ const DST_LANDMARKS: [number, number][] = [
 ];
 
 // Extract 5 landmark {x,y} positions from an ML Kit face result.
+// face.landmarks is an object: { leftEye, rightEye, noseBase, mouthLeft, mouthRight }
+// each with a nested .position {x, y}.
 function extractLandmarks(face: any): [number, number][] | null {
-  console.log('Face keys:', Object.keys(face));
-  console.log('Landmarks:', JSON.stringify(face.landmarks));
+  const lm = face.landmarks;
+  if (!lm) return null;
 
-  const lms: any[] = face.landmarks ?? [];
-  if (!Array.isArray(lms) || lms.length === 0) return null;
+  const leftEye    = lm.leftEye?.position;
+  const rightEye   = lm.rightEye?.position;
+  const nose       = lm.noseBase?.position;
+  const leftMouth  = lm.mouthLeft?.position;
+  const rightMouth = lm.mouthRight?.position;
 
-  // Normalise type strings to lowercase so we match both 'LEFT_EYE' and 'leftEye'.
-  const lmMap: Record<string, { x: number; y: number }> = {};
-  for (const lm of lms) {
-    const key = String(lm.type ?? '').toLowerCase().replace('_', '');
-    lmMap[key] = lm.position;
+  if (!leftEye || !rightEye || !nose || !leftMouth || !rightMouth) {
+    console.log('Missing landmarks:', {
+      leftEye: !!leftEye, rightEye: !!rightEye, nose: !!nose,
+      leftMouth: !!leftMouth, rightMouth: !!rightMouth,
+    });
+    return null;
   }
 
-  // Accept both camelCase and UPPER_SNAKE variants after normalisation.
-  const left   = lmMap['lefteye'];
-  const right  = lmMap['righteye'];
-  const nose   = lmMap['nosebase'];
-  const lMouth = lmMap['leftmouth'];
-  const rMouth = lmMap['rightmouth'];
-
-  if (!left || !right || !nose || !lMouth || !rMouth) return null;
-
+  console.log('Landmarks extracted successfully');
   return [
-    [left.x,   left.y],
-    [right.x,  right.y],
-    [nose.x,   nose.y],
-    [lMouth.x, lMouth.y],
-    [rMouth.x, rMouth.y],
+    [leftEye.x,    leftEye.y],
+    [rightEye.x,   rightEye.y],
+    [nose.x,       nose.y],
+    [leftMouth.x,  leftMouth.y],
+    [rightMouth.x, rightMouth.y],
   ];
 }
 
