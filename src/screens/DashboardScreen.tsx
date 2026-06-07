@@ -15,7 +15,6 @@ import {
 } from '../services/DatabaseService';
 
 const { width } = Dimensions.get('window');
-const CHART_WIDTH = width - 40;
 
 export default function DashboardScreen() {
   const [loading, setLoading]       = useState(true);
@@ -113,7 +112,7 @@ export default function DashboardScreen() {
       {/* ── Weekly bar chart ───────────────────────────────────────────────── */}
       <SectionLabel title="7-DAY ATTENDANCE" />
       <View style={styles.chartCard}>
-        <BarChart data={barData} width={CHART_WIDTH - 32} height={200} />
+        <BarChart data={barData} />
       </View>
 
       {/* ── Worker attendance list ─────────────────────────────────────────── */}

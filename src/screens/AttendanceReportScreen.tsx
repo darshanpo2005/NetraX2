@@ -1,10 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Dimensions, Platform,
+  ActivityIndicator, Alert, Dimensions, Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import BarChart from '../components/BarChart';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -17,7 +16,6 @@ import {
 } from '../services/DatabaseService';
 
 const { width } = Dimensions.get('window');
-const CHART_W   = width - 64; // 16 padding + 16 card padding × 2
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,8 +108,43 @@ export default function AttendanceReportScreen() {
   const defaultFrom = startOfDay(new Date(Date.now() - 6 * 86_400_000));
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate,   setToDate]   = useState(defaultTo);
-  const [showFrom, setShowFrom] = useState(false);
-  const [showTo,   setShowTo]   = useState(false);
+
+  // Custom date picker modal state
+  const [pickerTarget, setPickerTarget] = useState<'from' | 'to' | null>(null);
+  const [pickerDay,    setPickerDay]    = useState(1);
+  const [pickerMonth,  setPickerMonth]  = useState(1);
+  const [pickerYear,   setPickerYear]   = useState(new Date().getFullYear());
+
+  const openPicker = (target: 'from' | 'to') => {
+    const d = target === 'from' ? fromDate : toDate;
+    setPickerDay(d.getDate());
+    setPickerMonth(d.getMonth() + 1);
+    setPickerYear(d.getFullYear());
+    setPickerTarget(target);
+  };
+
+  const confirmPicker = () => {
+    const daysInMonth = new Date(pickerYear, pickerMonth, 0).getDate();
+    const safeDay     = Math.min(pickerDay, daysInMonth);
+    const d           = new Date(pickerYear, pickerMonth - 1, safeDay);
+    if (pickerTarget === 'from') setFromDate(startOfDay(d));
+    else setToDate(endOfDay(d));
+    setPickerTarget(null);
+  };
+
+  const stepField = (field: 'day' | 'month' | 'year', delta: number) => {
+    if (field === 'day') {
+      const daysInMonth = new Date(pickerYear, pickerMonth, 0).getDate();
+      setPickerDay(d => Math.max(1, Math.min(daysInMonth, d + delta)));
+    } else if (field === 'month') {
+      setPickerMonth(m => m + delta < 1 ? 12 : m + delta > 12 ? 1 : m + delta);
+    } else {
+      const now = new Date().getFullYear();
+      setPickerYear(y => Math.max(now - 5, Math.min(now, y + delta)));
+    }
+  };
+
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // Data state
   const [rows,    setRows]    = useState<AttendanceRow[]>([]);
@@ -224,7 +257,7 @@ export default function AttendanceReportScreen() {
 
         <SectionLabel title="7-DAY ATTENDANCE" />
         <View style={styles.chartCard}>
-          <BarChart data={barData} width={CHART_W} height={195} />
+          <BarChart data={barData} />
         </View>
 
         {/* ── Date range picker ─────────────────────────────────────────── */}
@@ -233,11 +266,7 @@ export default function AttendanceReportScreen() {
           <View style={styles.dateRow}>
             <View style={styles.datePicker}>
               <Text style={styles.datePickerLabel}>FROM</Text>
-              <TouchableOpacity
-                style={styles.dateBtn}
-                onPress={() => { setShowTo(false); setShowFrom(true); }}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('from')} activeOpacity={0.7}>
                 <Text style={styles.dateBtnIcon}>📅</Text>
                 <Text style={styles.dateBtnText}>{fmtDate(fromDate)}</Text>
               </TouchableOpacity>
@@ -249,11 +278,7 @@ export default function AttendanceReportScreen() {
 
             <View style={styles.datePicker}>
               <Text style={styles.datePickerLabel}>TO</Text>
-              <TouchableOpacity
-                style={styles.dateBtn}
-                onPress={() => { setShowFrom(false); setShowTo(true); }}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('to')} activeOpacity={0.7}>
                 <Text style={styles.dateBtnIcon}>📅</Text>
                 <Text style={styles.dateBtnText}>{fmtDate(toDate)}</Text>
               </TouchableOpacity>
@@ -265,32 +290,40 @@ export default function AttendanceReportScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Native date pickers */}
-        {showFrom && (
-          <DateTimePicker
-            value={fromDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            maximumDate={toDate}
-            onChange={(_, date) => {
-              setShowFrom(Platform.OS === 'ios');
-              if (date) setFromDate(startOfDay(date));
-            }}
-          />
-        )}
-        {showTo && (
-          <DateTimePicker
-            value={toDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            minimumDate={fromDate}
-            maximumDate={new Date()}
-            onChange={(_, date) => {
-              setShowTo(Platform.OS === 'ios');
-              if (date) setToDate(endOfDay(date));
-            }}
-          />
-        )}
+        {/* ── Custom date picker modal ───────────────────────────────────── */}
+        <Modal visible={pickerTarget !== null} transparent animationType="fade" onRequestClose={() => setPickerTarget(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select {pickerTarget === 'from' ? 'From' : 'To'} Date</Text>
+                <TouchableOpacity onPress={() => setPickerTarget(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {(['year', 'month', 'day'] as const).map(field => (
+                <View key={field} style={styles.stepRow}>
+                  <Text style={styles.stepLabel}>{field.toUpperCase()}</Text>
+                  <View style={styles.stepControls}>
+                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, -1)} activeOpacity={0.7}>
+                      <Text style={styles.stepBtnText}>‹</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.stepValue}>
+                      {field === 'month' ? MONTH_NAMES[pickerMonth - 1] : field === 'day' ? String(pickerDay).padStart(2, '0') : pickerYear}
+                    </Text>
+                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, 1)} activeOpacity={0.7}>
+                      <Text style={styles.stepBtnText}>›</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.modalConfirm} onPress={confirmPicker} activeOpacity={0.8}>
+                <Text style={styles.modalConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* ── Records section ───────────────────────────────────────────── */}
         <SectionLabel title={`RECORDS  ·  ${rangeLabel}`} />
@@ -483,6 +516,21 @@ const styles = StyleSheet.create({
   emptyIcon        : { fontSize: 48 },
   emptyText        : { color: '#94a3b8', fontSize: 18, fontWeight: '700' },
   emptySubText     : { color: '#475569', fontSize: 13, textAlign: 'center' },
+
+  // Modal date picker
+  modalOverlay     : { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modalCard        : { width: '100%', backgroundColor: '#0f172a', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#1e293b', gap: 16 },
+  modalHeader      : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modalTitle       : { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
+  modalClose       : { color: '#475569', fontSize: 20, fontWeight: '600' },
+  stepRow          : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1e293b', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  stepLabel        : { color: '#475569', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, width: 48 },
+  stepControls     : { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  stepBtn          : { width: 36, height: 36, backgroundColor: '#0f172a', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
+  stepBtnText      : { color: '#93c5fd', fontSize: 22, fontWeight: '300', lineHeight: 28 },
+  stepValue        : { color: '#f1f5f9', fontSize: 18, fontWeight: '700', minWidth: 64, textAlign: 'center' },
+  modalConfirm     : { backgroundColor: '#1e40af', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)' },
+  modalConfirmText : { color: '#93c5fd', fontSize: 15, fontWeight: '700' },
 
   // Export bar
   actionBar        : { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 20, backgroundColor: '#020817', borderTopWidth: 1, borderTopColor: '#1e293b' },
