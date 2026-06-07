@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
-import { syncAndPurge, isOnline } from '../services/SyncService';
+import { syncAndPurge, isOnline, isSyncConfigured } from '../services/SyncService';
 import { getModelInfo } from '../services/TFLiteService';
 
 const { width } = Dimensions.get('window');
@@ -136,7 +136,15 @@ export default function HomeScreen({ navigation }: any) {
       </View>
 
       {/* Sync Button */}
-      {online ? (
+      {!isSyncConfigured ? (
+        <View style={styles.unconfiguredCard}>
+          <Text style={styles.unconfiguredIcon}>🔌</Text>
+          <View>
+            <Text style={styles.unconfiguredTitle}>Sync Not Configured</Text>
+            <Text style={styles.unconfiguredSub}>Set AWS endpoint in SyncService.ts to enable</Text>
+          </View>
+        </View>
+      ) : online ? (
         <TouchableOpacity
           style={[styles.syncBtn, syncing && styles.syncBtnLoading]}
           onPress={handleSync}
@@ -212,10 +220,14 @@ const styles = StyleSheet.create({
   syncIcon     : { fontSize: 28 },
   syncTitle    : { color: '#38bdf8', fontSize: 15, fontWeight: '700' },
   syncSub      : { color: '#475569', fontSize: 12, marginTop: 2 },
-  offlineCard  : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(71,85,105,0.15)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#1e293b', marginBottom: 12 },
-  offlineIcon  : { fontSize: 28 },
-  offlineTitle : { color: '#94a3b8', fontSize: 15, fontWeight: '700' },
-  offlineSub   : { color: '#475569', fontSize: 12, marginTop: 2 },
+  offlineCard      : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(71,85,105,0.15)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#1e293b', marginBottom: 12 },
+  offlineIcon      : { fontSize: 28 },
+  offlineTitle     : { color: '#94a3b8', fontSize: 15, fontWeight: '700' },
+  offlineSub       : { color: '#475569', fontSize: 12, marginTop: 2 },
+  unconfiguredCard : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(239,68,68,0.07)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)', marginBottom: 12 },
+  unconfiguredIcon : { fontSize: 28 },
+  unconfiguredTitle: { color: '#f87171', fontSize: 15, fontWeight: '700' },
+  unconfiguredSub  : { color: '#475569', fontSize: 12, marginTop: 2 },
   testModelBtn  : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(124,58,237,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)', marginBottom: 12 },
   testModelIcon : { fontSize: 28 },
   testModelTitle: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },

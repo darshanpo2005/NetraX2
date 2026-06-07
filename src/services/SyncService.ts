@@ -3,6 +3,8 @@ import { getUnsyncedLogs, markAsSynced, purgeSyncedLogs } from './DatabaseServic
 
 const AWS_ENDPOINT = 'https://your-api-gateway-url.amazonaws.com/prod';
 
+export const isSyncConfigured = !AWS_ENDPOINT.includes('your-api-gateway');
+
 export const isOnline = async (): Promise<boolean> => {
   const state = await NetInfo.fetch();
   return !!(state.isConnected && state.isInternetReachable);
@@ -11,6 +13,10 @@ export const isOnline = async (): Promise<boolean> => {
 export const syncAndPurge = async (): Promise<{
   success: boolean; synced: number; purged: number; error: string | null;
 }> => {
+  if (!isSyncConfigured) {
+    return { success: false, synced: 0, purged: 0, error: 'Sync not configured' };
+  }
+
   try {
     const logs = await getUnsyncedLogs();
     if (!logs.length) return { success: true, synced: 0, purged: 0, error: null };
