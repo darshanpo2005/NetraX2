@@ -128,13 +128,140 @@ function safeCrop(
   return { originX: x1, originY: y1, width: x2 - x1, height: y2 - y1 };
 }
 
+// ─── ArcFace alignment ────────────────────────────────────────────────────────
+
+// Target landmark positions in the 112×112 ArcFace canonical space.
+const DST_LANDMARKS: [number, number][] = [
+  [38.2946, 51.6963], // left eye
+  [73.5318, 51.5014], // right eye
+  [56.0252, 71.7366], // nose
+  [41.5493, 92.3655], // left mouth
+  [70.7299, 92.2041], // right mouth
+];
+
+const LANDMARK_TYPES = ['leftEye', 'rightEye', 'noseBase', 'leftMouth', 'rightMouth'] as const;
+
+// Extract 5 landmark {x,y} positions from an ML Kit face result.
+function extractLandmarks(face: any): [number, number][] | null {
+  const lmMap = Object.fromEntries(
+    (face.landmarks ?? []).map((l: any) => [l.type, l.position])
+  );
+  const pts = LANDMARK_TYPES.map(t => lmMap[t]);
+  if (pts.some(p => !p)) return null;
+  return pts.map(p => [p.x as number, p.y as number]);
+}
+
+// Compute a 4-DOF similarity transform (scale + rotation + translation) from
+// N src→dst point pairs using least-squares normal equations.
+// Forward mapping: xd = a*xs - b*ys + tx,  yd = b*xs + a*ys + ty
+function computeSimilarityTransform(
+  src: [number, number][],
+  dst: [number, number][]
+): [number, number, number, number] {
+  const n = src.length;
+  let S = 0, Sx = 0, Sy = 0;
+  let Sxx = 0, Syx = 0, Sdx = 0, Sdy = 0;
+
+  for (let i = 0; i < n; i++) {
+    const [xi, yi]   = src[i];
+    const [xi2, yi2] = dst[i];
+    S   += xi * xi + yi * yi;
+    Sx  += xi;
+    Sy  += yi;
+    Sxx += xi * xi2 + yi * yi2;
+    Syx += -yi * xi2 + xi * yi2;
+    Sdx += xi2;
+    Sdy += yi2;
+  }
+
+  // Augmented 4×4 system: (A^T A) x = (A^T b), where x = [a, b, tx, ty]
+  const M: number[][] = [
+    [S,  0,   Sx, Sy,  Sxx],
+    [0,  S,  -Sy, Sx,  Syx],
+    [Sx, -Sy,  n,  0,  Sdx],
+    [Sy,  Sx,  0,  n,  Sdy],
+  ];
+
+  // Gaussian elimination with partial pivoting
+  for (let col = 0; col < 4; col++) {
+    let maxRow = col;
+    for (let row = col + 1; row < 4; row++) {
+      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+    }
+    [M[col], M[maxRow]] = [M[maxRow], M[col]];
+    const pivot = M[col][col];
+    if (Math.abs(pivot) < 1e-10) return [1, 0, 0, 0]; // degenerate fallback
+    for (let row = col + 1; row < 4; row++) {
+      const factor = M[row][col] / pivot;
+      for (let j = col; j <= 4; j++) M[row][j] -= factor * M[col][j];
+    }
+  }
+
+  // Back substitution
+  const x = new Array(4).fill(0);
+  for (let i = 3; i >= 0; i--) {
+    x[i] = M[i][4];
+    for (let j = i + 1; j < 4; j++) x[i] -= M[i][j] * x[j];
+    x[i] /= M[i][i];
+  }
+  return [x[0], x[1], x[2], x[3]]; // a, b, tx, ty
+}
+
+// Warp srcRgb to a 112×112 output using bilinear interpolation.
+// Applies the inverse of: xd = a*xs - b*ys + tx, yd = b*xs + a*ys + ty
+// Inverse: xs = (a*(xd-tx) + b*(yd-ty)) / (a²+b²)
+//          ys = (-b*(xd-tx) + a*(yd-ty)) / (a²+b²)
+function warpAffine(
+  srcRgb: Uint8Array,
+  srcW: number,
+  srcH: number,
+  a: number, b: number, tx: number, ty: number
+): Uint8Array {
+  const out = new Uint8Array(112 * 112 * 3);
+  const det = a * a + b * b;
+  if (det < 1e-10) return out;
+  const ia = a / det, ib = b / det;
+
+  for (let yd = 0; yd < 112; yd++) {
+    for (let xd = 0; xd < 112; xd++) {
+      const dx = xd - tx, dy = yd - ty;
+      const xs =  ia * dx + ib * dy;
+      const ys = -ib * dx + ia * dy;
+
+      const x0 = Math.floor(xs), y0 = Math.floor(ys);
+      const x1 = x0 + 1,        y1 = y0 + 1;
+      const fx = xs - x0,        fy = ys - y0;
+      const idx = (yd * 112 + xd) * 3;
+
+      for (let c = 0; c < 3; c++) {
+        const px = (px: number, py: number) =>
+          px >= 0 && px < srcW && py >= 0 && py < srcH
+            ? srcRgb[(py * srcW + px) * 3 + c]
+            : 128; // neutral gray for out-of-bounds
+
+        const v =
+          px(x0, y0) * (1 - fx) * (1 - fy) +
+          px(x1, y0) * fx       * (1 - fy) +
+          px(x0, y1) * (1 - fx) * fy +
+          px(x1, y1) * fx       * fy;
+        out[idx + c] = Math.round(v);
+      }
+    }
+  }
+  return out;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 export const extractFaceEmbedding = async (
   imageUri: string
 ): Promise<FaceEmbeddingResult> => {
   try {
-    // ── 1. ML Kit face detection ──────────────────────────────────────────
-    const faces = await FaceDetector.detect(imageUri);
+    // ── 1. ML Kit face detection with landmarks ───────────────────────────
+    const faces = await (FaceDetector as any).detect(imageUri, {
+      landmarkMode: 'all',
+      performanceMode: 'accurate',
+      classificationMode: 'all',
+    });
     if (!faces || faces.length === 0) {
       return {
         success: false, embedding: null, faceDetected: false,
@@ -143,30 +270,68 @@ export const extractFaceEmbedding = async (
     }
 
     // Pick the largest face
-    const face = faces.reduce((best, f) =>
+    const face = faces.reduce((best: any, f: any) =>
       f.frame.width * f.frame.height > best.frame.width * best.frame.height ? f : best
     );
 
-    // ── 2. Get image dimensions for safe clamping ─────────────────────────
+    // ── 2. Get image dimensions ───────────────────────────────────────────
     const { width: imgW, height: imgH } = await getImageSize(imageUri);
-    const crop = safeCrop(face.frame, imgW, imgH);
 
-    // ── 3. Crop to face region then resize to 112×112 ─────────────────────
-    const processed = await ImageManipulator.manipulateAsync(
-      imageUri,
-      [
-        { crop },
-        { resize: { width: 112, height: 112 } },
-      ],
-      { format: ImageManipulator.SaveFormat.PNG, base64: true }
-    );
+    // ── 3. Attempt alignment path ─────────────────────────────────────────
+    const landmarks = extractLandmarks(face);
+    let rgb: Uint8Array | null = null;
 
-    if (!processed.base64) {
-      return { success: false, embedding: null, faceDetected: true, error: 'Image processing failed' };
+    if (landmarks) {
+      console.log('Using alignment');
+
+      // Crop a generous region around the face landmarks for the warp source.
+      // 1× face-span padding on each side ensures the inverse-warped source
+      // coords stay within the decoded region for typical scale factors.
+      const lmXs = landmarks.map(l => l[0]);
+      const lmYs = landmarks.map(l => l[1]);
+      const minX = Math.min(...lmXs), maxX = Math.max(...lmXs);
+      const minY = Math.min(...lmYs), maxY = Math.max(...lmYs);
+      const pad  = Math.max(maxX - minX, maxY - minY);
+
+      const cropX1 = Math.max(0, Math.floor(minX - pad));
+      const cropY1 = Math.max(0, Math.floor(minY - pad));
+      const cropX2 = Math.min(imgW, Math.ceil(maxX + pad));
+      const cropY2 = Math.min(imgH, Math.ceil(maxY + pad));
+      const cropW  = cropX2 - cropX1;
+      const cropH  = cropY2 - cropY1;
+
+      const cropped = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ crop: { originX: cropX1, originY: cropY1, width: cropW, height: cropH } }],
+        { format: ImageManipulator.SaveFormat.PNG, base64: true }
+      );
+
+      if (cropped.base64) {
+        const srcRgb = decodePngToRgb(cropped.base64);
+        if (srcRgb) {
+          // Shift landmarks into crop-local coordinates
+          const localLm: [number, number][] = landmarks.map(([x, y]) => [x - cropX1, y - cropY1]);
+          const [a, b, tx, ty] = computeSimilarityTransform(localLm, DST_LANDMARKS);
+          rgb = warpAffine(srcRgb, cropW, cropH, a, b, tx, ty);
+        }
+      }
     }
 
-    // ── 4. Decode PNG → raw RGB (112×112×3) ──────────────────────────────
-    const rgb = decodePngToRgb(processed.base64);
+    // ── 4. Fallback: bbox crop + resize ───────────────────────────────────
+    if (!rgb) {
+      console.log('Using fallback');
+      const crop = safeCrop(face.frame, imgW, imgH);
+      const processed = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ crop }, { resize: { width: 112, height: 112 } }],
+        { format: ImageManipulator.SaveFormat.PNG, base64: true }
+      );
+      if (!processed.base64) {
+        return { success: false, embedding: null, faceDetected: true, error: 'Image processing failed' };
+      }
+      rgb = decodePngToRgb(processed.base64);
+    }
+
     if (!rgb || rgb.length < 112 * 112 * 3) {
       return { success: false, embedding: null, faceDetected: true, error: 'PNG decode failed' };
     }
