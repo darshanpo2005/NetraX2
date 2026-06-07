@@ -4,7 +4,7 @@ import {
   Dimensions, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { BarChart } from 'react-native-chart-kit';
+import BarChart from '../components/BarChart';
 import {
   getWorkerCount,
   getTodayAttendance,
@@ -57,10 +57,7 @@ export default function DashboardScreen() {
     { label: 'Rate',        value: `${rate}%`,    icon: '📈', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',   border: 'rgba(245,158,11,0.25)' },
   ];
 
-  const chartData = {
-    labels: weekData.map(d => d.label),
-    datasets: [{ data: weekData.map(d => Math.max(d.count, 0)) }],
-  };
+  const barData = weekData.map(d => ({ x: d.label, y: Math.max(d.count, 0) }));
 
   const formatTime = (ts: number | null) => {
     if (!ts) return 'Never';
@@ -116,32 +113,7 @@ export default function DashboardScreen() {
       {/* ── Weekly bar chart ───────────────────────────────────────────────── */}
       <SectionLabel title="7-DAY ATTENDANCE" />
       <View style={styles.chartCard}>
-        <BarChart
-          data={chartData}
-          width={CHART_WIDTH - 32}
-          height={180}
-          yAxisLabel=""
-          yAxisSuffix=""
-          fromZero
-          showValuesOnTopOfBars
-          withInnerLines={false}
-          chartConfig={{
-            backgroundColor: '#0f172a',
-            backgroundGradientFrom: '#0f172a',
-            backgroundGradientTo: '#0f172a',
-            decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(59,130,246,${opacity})`,
-            labelColor: () => '#64748b',
-            propsForLabels: { fontSize: 11 },
-            barPercentage: 0.6,
-          }}
-          style={styles.chart}
-        />
-        <View style={styles.chartFooter}>
-          {weekData.map(d => (
-            <Text key={d.date} style={styles.chartDate}>{d.date}</Text>
-          ))}
-        </View>
+        <BarChart data={barData} width={CHART_WIDTH - 32} height={200} />
       </View>
 
       {/* ── Worker attendance list ─────────────────────────────────────────── */}
@@ -223,10 +195,7 @@ const styles = StyleSheet.create({
   summaryValue     : { fontSize: 28, fontWeight: '800' },
   summaryLabel     : { fontSize: 11, color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
-  chart            : { borderRadius: 8, marginLeft: -8 },
-  chartFooter      : { flexDirection: 'row', justifyContent: 'space-around', marginTop: 4 },
-  chartDate        : { fontSize: 9, color: '#334155', textAlign: 'center' },
+  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
 
   listCard         : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
   emptyText        : { color: '#475569', textAlign: 'center', padding: 24, fontSize: 13 },

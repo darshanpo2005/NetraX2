@@ -21,7 +21,6 @@
     "pako": "^2.1.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-chart-kit": "^6.12.3",
     "react-native-fast-tflite": "~1.6.1",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",

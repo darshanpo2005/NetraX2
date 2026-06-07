@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { BarChart } from 'react-native-chart-kit';
+import BarChart from '../components/BarChart';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -192,8 +192,7 @@ export default function AttendanceReportScreen() {
   const rate    = todaySt.total > 0 ? Math.round((todaySt.present / todaySt.total) * 100) : 0;
   const groups  = groupByDate(rows);
   const totals  = workerTotals(rows);
-  const chartLabels  = weekly.map(d => d.day);
-  const chartCounts  = weekly.map(d => Math.max(d.count, 0));
+  const barData = weekly.map(d => ({ x: d.day, y: Math.max(d.count, 0) }));
 
   const summaryCards = [
     { label: 'Enrolled',  value: todaySt.total,   icon: '👥', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.25)' },
@@ -225,27 +224,7 @@ export default function AttendanceReportScreen() {
 
         <SectionLabel title="7-DAY ATTENDANCE" />
         <View style={styles.chartCard}>
-          <BarChart
-            data={{ labels: chartLabels, datasets: [{ data: chartCounts }] }}
-            width={CHART_W}
-            height={170}
-            yAxisLabel=""
-            yAxisSuffix=""
-            fromZero
-            showValuesOnTopOfBars
-            withInnerLines={false}
-            chartConfig={{
-              backgroundColor: '#0f172a',
-              backgroundGradientFrom: '#0f172a',
-              backgroundGradientTo: '#0f172a',
-              decimalPlaces: 0,
-              color: (opacity = 1) => `rgba(59,130,246,${opacity})`,
-              labelColor: () => '#64748b',
-              propsForLabels: { fontSize: 11 },
-              barPercentage: 0.6,
-            }}
-            style={styles.chart}
-          />
+          <BarChart data={barData} width={CHART_W} height={195} />
         </View>
 
         {/* ── Date range picker ─────────────────────────────────────────── */}
@@ -452,8 +431,7 @@ const styles = StyleSheet.create({
   summaryLabel     : { fontSize: 10, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Chart
-  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
-  chart            : { borderRadius: 8, marginLeft: -8 },
+  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
 
   // Date range picker
   dateRangeCard    : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, gap: 14 },
