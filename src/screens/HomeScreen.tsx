@@ -56,7 +56,6 @@ export default function HomeScreen({ navigation }: any) {
     { icon: '⚡', label: 'Admin\nConsole',     sub: 'Benchmarks & system logs', color: '#d97706', bg: 'rgba(217,119,6,0.1)', border: 'rgba(217,119,6,0.3)', screen: 'Admin'      },
     { icon: '📊', label: 'View\nReports',      sub: 'Attendance history & export', color: '#0891b2', bg: 'rgba(8,145,178,0.1)', border: 'rgba(8,145,178,0.3)', screen: 'Reports'    },
     { icon: '📈', label: 'Dashboard',          sub: 'Charts & live statistics',   color: '#db2777', bg: 'rgba(219,39,119,0.1)', border: 'rgba(219,39,119,0.3)', screen: 'Dashboard'  },
-    { icon: '🔍', label: 'Analytics',          sub: 'Date range & export reports', color: '#0284c7', bg: 'rgba(2,132,199,0.1)',  border: 'rgba(2,132,199,0.3)',  screen: 'Reports'    },
   ];
 
   const now = new Date();
