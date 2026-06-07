@@ -1,24 +1,35 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  ActivityIndicator, Alert, Dimensions, Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { BarChart } from 'react-native-chart-kit';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { getAttendanceWithWorkers, AttendanceRow } from '../services/DatabaseService';
+import {
+  getAttendanceByDateRange,
+  getWeeklyStats,
+  getTodayStats,
+  type AttendanceRow,
+} from '../services/DatabaseService';
 
-type Filter = 'today' | 'week' | 'month' | 'all';
-
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'today', label: 'Today'      },
-  { key: 'week',  label: 'This Week'  },
-  { key: 'month', label: 'This Month' },
-  { key: 'all',   label: 'All Time'   },
-];
+const { width } = Dimensions.get('window');
+const CHART_W   = width - 64; // 16 padding + 16 card padding × 2
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function startOfDay(d: Date): Date {
+  const r = new Date(d); r.setHours(0, 0, 0, 0); return r;
+}
+function endOfDay(d: Date): Date {
+  const r = new Date(d); r.setHours(23, 59, 59, 999); return r;
+}
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 function groupByDate(rows: AttendanceRow[]): { date: string; items: AttendanceRow[] }[] {
   const map: Record<string, AttendanceRow[]> = {};
@@ -39,7 +50,7 @@ function workerTotals(rows: AttendanceRow[]): { name: string; employeeId: string
   return Object.values(map).sort((a, b) => b.count - a.count);
 }
 
-// ─── CSV ─────────────────────────────────────────────────────────────────────
+// ─── Export builders ──────────────────────────────────────────────────────────
 
 function buildCSV(rows: AttendanceRow[]): string {
   const header = 'Name,Employee ID,Date,Time,Day';
@@ -49,48 +60,33 @@ function buildCSV(rows: AttendanceRow[]): string {
   return [header, ...lines].join('\n');
 }
 
-// ─── PDF HTML ─────────────────────────────────────────────────────────────────
-
-function buildPdfHtml(rows: AttendanceRow[], filterLabel: string): string {
+function buildPdfHtml(rows: AttendanceRow[], rangeLabel: string): string {
   const uniqueWorkers = new Set(rows.map(r => r.employeeId || r.workerName)).size;
-  const dateRange     = rows.length
-    ? `${rows[rows.length - 1].date} – ${rows[0].date}`
-    : '—';
+  const dateRange     = rows.length ? `${rows[rows.length - 1].date} – ${rows[0].date}` : '—';
   const tableRows = rows.map((r, i) => `
     <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'}">
-      <td>${r.workerName}</td>
-      <td>${r.employeeId || '—'}</td>
-      <td>${r.date}</td>
-      <td>${r.time}</td>
-      <td>${r.day}</td>
+      <td>${r.workerName}</td><td>${r.employeeId || '—'}</td>
+      <td>${r.date}</td><td>${r.time}</td><td>${r.day}</td>
     </tr>`).join('');
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1e293b; padding: 32px; }
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; border-bottom: 2px solid #2563eb; padding-bottom: 16px; }
-  .brand  { font-size: 26px; font-weight: 800; color: #1d4ed8; letter-spacing: -0.5px; }
-  .brand span { color: #64748b; font-size: 14px; font-weight: 400; display: block; margin-top: 2px; }
-  .stats  { display: flex; gap: 24px; margin-bottom: 24px; }
-  .stat   { background: #f1f5f9; border-radius: 10px; padding: 14px 20px; flex: 1; }
-  .stat-n { font-size: 28px; font-weight: 800; color: #2563eb; }
-  .stat-l { font-size: 12px; color: #64748b; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
-  table   { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead tr{ background: #1d4ed8; color: #fff; }
-  th, td  { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-  th      { font-weight: 700; letter-spacing: 0.4px; }
-  .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; }
-</style>
-</head>
-<body>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1e293b;padding:32px}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;border-bottom:2px solid #2563eb;padding-bottom:16px}
+  .brand{font-size:26px;font-weight:800;color:#1d4ed8;letter-spacing:-0.5px}
+  .brand span{color:#64748b;font-size:14px;font-weight:400;display:block;margin-top:2px}
+  .stats{display:flex;gap:24px;margin-bottom:24px}
+  .stat{background:#f1f5f9;border-radius:10px;padding:14px 20px;flex:1}
+  .stat-n{font-size:28px;font-weight:800;color:#2563eb}
+  .stat-l{font-size:12px;color:#64748b;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead tr{background:#1d4ed8;color:#fff}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #e2e8f0}
+  th{font-weight:700;letter-spacing:.4px}
+  .footer{margin-top:24px;font-size:11px;color:#94a3b8;text-align:center}
+</style></head><body>
   <div class="header">
-    <div>
-      <div class="brand">NetraX <span>Attendance Report — ${filterLabel}</span></div>
-    </div>
+    <div><div class="brand">NetraX <span>Attendance Report — ${rangeLabel}</span></div></div>
     <div style="font-size:12px;color:#64748b">Generated: ${new Date().toLocaleString('en-IN')}</div>
   </div>
   <div class="stats">
@@ -103,73 +99,108 @@ function buildPdfHtml(rows: AttendanceRow[], filterLabel: string): string {
     <tbody>${tableRows}</tbody>
   </table>
   <div class="footer">Generated by NetraX 2.0 · Face Recognition Attendance System</div>
-</body>
-</html>`;
+</body></html>`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AttendanceReportScreen() {
-  const [filter, setFilter]   = useState<Filter>('today');
-  const [rows, setRows]       = useState<AttendanceRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy]       = useState<'csv' | 'pdf' | 'xls' | null>(null);
+  // Date range state — default: last 7 days
+  const defaultTo   = endOfDay(new Date());
+  const defaultFrom = startOfDay(new Date(Date.now() - 6 * 86_400_000));
+  const [fromDate, setFromDate] = useState(defaultFrom);
+  const [toDate,   setToDate]   = useState(defaultTo);
+  const [showFrom, setShowFrom] = useState(false);
+  const [showTo,   setShowTo]   = useState(false);
 
-  const load = useCallback(async (f: Filter) => {
+  // Data state
+  const [rows,    setRows]    = useState<AttendanceRow[]>([]);
+  const [weekly,  setWeekly]  = useState<{ day: string; count: number }[]>([]);
+  const [todaySt, setTodaySt] = useState({ total: 0, present: 0, absent: 0 });
+  const [loading, setLoading] = useState(true);
+  const [busy,    setBusy]    = useState<'csv' | 'pdf' | 'xls' | null>(null);
+
+  const loadAll = useCallback(async (from: Date, to: Date) => {
     setLoading(true);
-    try { setRows(await getAttendanceWithWorkers(f)); }
-    catch (e: any) { Alert.alert('Error', e.message); }
-    finally { setLoading(false); }
+    try {
+      const [r, w, t] = await Promise.all([
+        getAttendanceByDateRange(startOfDay(from).getTime(), endOfDay(to).getTime()),
+        getWeeklyStats(),
+        getTodayStats(),
+      ]);
+      setRows(r);
+      setWeekly(w);
+      setTodaySt(t);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(filter); }, [filter]));
+  useFocusEffect(useCallback(() => { loadAll(fromDate, toDate); }, []));
 
-  const filterLabel = FILTERS.find(f => f.key === filter)?.label ?? filter;
-  const slugLabel   = filterLabel.replace(/\s+/g, '_');
+  const applyRange = () => loadAll(fromDate, toDate);
 
-  const shareFile = async (uri: string, mimeType: string, title: string) => {
-    const ok = await Sharing.isAvailableAsync();
-    if (!ok) { Alert.alert('Sharing unavailable', 'File saved to documents.'); return; }
-    await Sharing.shareAsync(uri, { mimeType, dialogTitle: title });
+  // ── Export helpers ─────────────────────────────────────────────────────────
+  const rangeLabel = `${fmtDate(fromDate)} – ${fmtDate(toDate)}`;
+  const slug       = `${fromDate.toISOString().slice(0, 10)}_${toDate.toISOString().slice(0, 10)}`;
+
+  const share = async (uri: string, mime: string, title: string) => {
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: title });
+    } else {
+      Alert.alert('Saved', 'File saved to documents.');
+    }
   };
 
   const handleCSV = async () => {
-    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    if (!rows.length) { Alert.alert('No Data', 'No records in selected range.'); return; }
     setBusy('csv');
     try {
-      const uri = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.csv`;
+      const uri = (FileSystem.documentDirectory ?? '') + `netrax_${slug}.csv`;
       await FileSystem.writeAsStringAsync(uri, buildCSV(rows), { encoding: FileSystem.EncodingType.UTF8 });
-      await shareFile(uri, 'text/csv', 'Export Attendance CSV');
+      await share(uri, 'text/csv', 'Export CSV');
     } catch (e: any) { Alert.alert('Export Failed', e.message); }
     finally { setBusy(null); }
   };
 
   const handlePDF = async () => {
-    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    if (!rows.length) { Alert.alert('No Data', 'No records in selected range.'); return; }
     setBusy('pdf');
     try {
-      const { uri } = await Print.printToFileAsync({ html: buildPdfHtml(rows, filterLabel) });
-      const dest    = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.pdf`;
-      await FileSystem.moveAsync({ from: uri, to: dest });
-      await shareFile(dest, 'application/pdf', 'Export Attendance PDF');
+      const { uri: tmp } = await Print.printToFileAsync({ html: buildPdfHtml(rows, rangeLabel) });
+      const dest = (FileSystem.documentDirectory ?? '') + `netrax_${slug}.pdf`;
+      await FileSystem.moveAsync({ from: tmp, to: dest });
+      await share(dest, 'application/pdf', 'Export PDF');
     } catch (e: any) { Alert.alert('Export Failed', e.message); }
     finally { setBusy(null); }
   };
 
   const handleXLS = async () => {
-    if (!rows.length) { Alert.alert('No Data', 'No records to export.'); return; }
+    if (!rows.length) { Alert.alert('No Data', 'No records in selected range.'); return; }
     setBusy('xls');
     try {
-      // CSV with .xls extension — opens natively in Excel and Google Sheets
-      const uri = (FileSystem.documentDirectory ?? '') + `netrax_attendance_${slugLabel}_${Date.now()}.xls`;
+      const uri = (FileSystem.documentDirectory ?? '') + `netrax_${slug}.xls`;
       await FileSystem.writeAsStringAsync(uri, buildCSV(rows), { encoding: FileSystem.EncodingType.UTF8 });
-      await shareFile(uri, 'application/vnd.ms-excel', 'Export Attendance XLS');
+      await share(uri, 'application/vnd.ms-excel', 'Export Excel');
     } catch (e: any) { Alert.alert('Export Failed', e.message); }
     finally { setBusy(null); }
   };
 
-  const groups = groupByDate(rows);
-  const totals = workerTotals(rows);
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const rate    = todaySt.total > 0 ? Math.round((todaySt.present / todaySt.total) * 100) : 0;
+  const groups  = groupByDate(rows);
+  const totals  = workerTotals(rows);
+  const chartLabels  = weekly.map(d => d.day);
+  const chartCounts  = weekly.map(d => Math.max(d.count, 0));
+
+  const summaryCards = [
+    { label: 'Enrolled',  value: todaySt.total,   icon: '👥', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.25)' },
+    { label: 'Present',   value: todaySt.present,  icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.1)',  border: 'rgba(16,185,129,0.25)' },
+    { label: 'Absent',    value: todaySt.absent,   icon: '❌', color: '#ef4444', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.25)'  },
+    { label: 'Rate',      value: `${rate}%`,       icon: '📈', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.25)' },
+  ];
 
   return (
     <View style={styles.root}>
@@ -180,54 +211,141 @@ export default function AttendanceReportScreen() {
       >
         <View style={styles.orb1} /><View style={styles.orb2} />
 
-        {/* Filter tabs */}
-        <View style={styles.filterRow}>
-          {FILTERS.map(f => (
-            <TouchableOpacity
-              key={f.key}
-              style={[styles.filterTab, filter === f.key && styles.filterTabActive]}
-              onPress={() => { setFilter(f.key); load(f.key); }}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterTabText, filter === f.key && styles.filterTabTextActive]}>
-                {f.label}
-              </Text>
-            </TouchableOpacity>
+        {/* ── Analytics dashboard ───────────────────────────────────────── */}
+        <SectionLabel title="TODAY'S OVERVIEW" />
+        <View style={styles.summaryGrid}>
+          {summaryCards.map(card => (
+            <View key={card.label} style={[styles.summaryCard, { backgroundColor: card.bg, borderColor: card.border }]}>
+              <Text style={styles.summaryIcon}>{card.icon}</Text>
+              <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
+              <Text style={styles.summaryLabel}>{card.label}</Text>
+            </View>
           ))}
         </View>
 
-        {/* Summary */}
-        <View style={styles.summaryBar}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNum}>{rows.length}</Text>
-            <Text style={styles.summaryLbl}>Records</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNum}>{totals.length}</Text>
-            <Text style={styles.summaryLbl}>Workers</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNum, { fontSize: 14 }]}>{filterLabel}</Text>
-            <Text style={styles.summaryLbl}>Period</Text>
-          </View>
+        <SectionLabel title="7-DAY ATTENDANCE" />
+        <View style={styles.chartCard}>
+          <BarChart
+            data={{ labels: chartLabels, datasets: [{ data: chartCounts }] }}
+            width={CHART_W}
+            height={170}
+            yAxisLabel=""
+            yAxisSuffix=""
+            fromZero
+            showValuesOnTopOfBars
+            withInnerLines={false}
+            chartConfig={{
+              backgroundColor: '#0f172a',
+              backgroundGradientFrom: '#0f172a',
+              backgroundGradientTo: '#0f172a',
+              decimalPlaces: 0,
+              color: (opacity = 1) => `rgba(59,130,246,${opacity})`,
+              labelColor: () => '#64748b',
+              propsForLabels: { fontSize: 11 },
+              barPercentage: 0.6,
+            }}
+            style={styles.chart}
+          />
         </View>
 
+        {/* ── Date range picker ─────────────────────────────────────────── */}
+        <SectionLabel title="DATE RANGE" />
+        <View style={styles.dateRangeCard}>
+          <View style={styles.dateRow}>
+            <View style={styles.datePicker}>
+              <Text style={styles.datePickerLabel}>FROM</Text>
+              <TouchableOpacity
+                style={styles.dateBtn}
+                onPress={() => { setShowTo(false); setShowFrom(true); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dateBtnIcon}>📅</Text>
+                <Text style={styles.dateBtnText}>{fmtDate(fromDate)}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dateArrow}>
+              <Text style={styles.dateArrowText}>→</Text>
+            </View>
+
+            <View style={styles.datePicker}>
+              <Text style={styles.datePickerLabel}>TO</Text>
+              <TouchableOpacity
+                style={styles.dateBtn}
+                onPress={() => { setShowFrom(false); setShowTo(true); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.dateBtnIcon}>📅</Text>
+                <Text style={styles.dateBtnText}>{fmtDate(toDate)}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.applyBtn} onPress={applyRange} activeOpacity={0.8}>
+            <Text style={styles.applyBtnText}>Apply Range</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Native date pickers */}
+        {showFrom && (
+          <DateTimePicker
+            value={fromDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            maximumDate={toDate}
+            onChange={(_, date) => {
+              setShowFrom(Platform.OS === 'ios');
+              if (date) setFromDate(startOfDay(date));
+            }}
+          />
+        )}
+        {showTo && (
+          <DateTimePicker
+            value={toDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            minimumDate={fromDate}
+            maximumDate={new Date()}
+            onChange={(_, date) => {
+              setShowTo(Platform.OS === 'ios');
+              if (date) setToDate(endOfDay(date));
+            }}
+          />
+        )}
+
+        {/* ── Records section ───────────────────────────────────────────── */}
+        <SectionLabel title={`RECORDS  ·  ${rangeLabel}`} />
+
         {loading ? (
-          <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 60 }} />
+          <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 40, marginBottom: 40 }} />
         ) : rows.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>No attendance records</Text>
-            <Text style={styles.emptySubText}>Records appear here after face scans</Text>
+            <Text style={styles.emptyText}>No records in range</Text>
+            <Text style={styles.emptySubText}>Try a wider date range or mark attendance first</Text>
           </View>
         ) : (
           <>
-            {/* Per-worker totals */}
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionLine} /><Text style={styles.sectionTitle}>BY WORKER</Text><View style={styles.sectionLine} />
+            {/* Summary bar */}
+            <View style={styles.summaryBar}>
+              <View style={styles.summaryBarItem}>
+                <Text style={styles.summaryBarNum}>{rows.length}</Text>
+                <Text style={styles.summaryBarLbl}>Records</Text>
+              </View>
+              <View style={styles.summaryBarDivider} />
+              <View style={styles.summaryBarItem}>
+                <Text style={styles.summaryBarNum}>{totals.length}</Text>
+                <Text style={styles.summaryBarLbl}>Workers</Text>
+              </View>
+              <View style={styles.summaryBarDivider} />
+              <View style={styles.summaryBarItem}>
+                <Text style={styles.summaryBarNum}>{groups.length}</Text>
+                <Text style={styles.summaryBarLbl}>Days</Text>
+              </View>
             </View>
+
+            {/* Per-worker totals */}
+            <SectionLabel title="BY WORKER" />
             <View style={styles.totalsCard}>
               {totals.map((t, i) => (
                 <View key={t.employeeId + i} style={[styles.totalRow, i < totals.length - 1 && styles.totalRowBorder]}>
@@ -243,9 +361,7 @@ export default function AttendanceReportScreen() {
             </View>
 
             {/* Records grouped by date */}
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionLine} /><Text style={styles.sectionTitle}>RECORDS</Text><View style={styles.sectionLine} />
-            </View>
+            <SectionLabel title="ATTENDANCE LOG" />
             {groups.map(group => (
               <View key={group.date} style={styles.dateGroup}>
                 <View style={styles.dateHeader}>
@@ -270,101 +386,130 @@ export default function AttendanceReportScreen() {
             ))}
           </>
         )}
-        {/* bottom padding so last record isn't hidden by action bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Fixed bottom action bar */}
+      {/* ── Fixed export bar ──────────────────────────────────────────────── */}
       <View style={styles.actionBar}>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnCSV, busy === 'csv' && styles.actionBtnBusy]}
-          onPress={handleCSV} disabled={!!busy} activeOpacity={0.8}
-        >
-          {busy === 'csv'
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <><Text style={styles.actionBtnIcon}>📊</Text><Text style={styles.actionBtnText}>CSV</Text></>}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnPDF, busy === 'pdf' && styles.actionBtnBusy]}
-          onPress={handlePDF} disabled={!!busy} activeOpacity={0.8}
-        >
-          {busy === 'pdf'
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <><Text style={styles.actionBtnIcon}>📄</Text><Text style={styles.actionBtnText}>PDF</Text></>}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnXLS, busy === 'xls' && styles.actionBtnBusy]}
-          onPress={handleXLS} disabled={!!busy} activeOpacity={0.8}
-        >
-          {busy === 'xls'
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <><Text style={styles.actionBtnIcon}>📧</Text><Text style={styles.actionBtnText}>Excel</Text></>}
-        </TouchableOpacity>
+        <ExportBtn label="CSV"   icon="📊" color="#059669" busy={busy === 'csv'} onPress={handleCSV} anyBusy={!!busy} />
+        <ExportBtn label="PDF"   icon="📄" color="#dc2626" busy={busy === 'pdf'} onPress={handlePDF} anyBusy={!!busy} />
+        <ExportBtn label="Excel" icon="📧" color="#d97706" busy={busy === 'xls'} onPress={handleXLS} anyBusy={!!busy} />
       </View>
     </View>
   );
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionLabel({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionLine} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionLine} />
+    </View>
+  );
+}
+
+function ExportBtn({
+  label, icon, color, busy, anyBusy, onPress,
+}: {
+  label: string; icon: string; color: string; busy: boolean; anyBusy: boolean; onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.actionBtn, { backgroundColor: color }, (busy || anyBusy) && styles.actionBtnBusy]}
+      onPress={onPress}
+      disabled={anyBusy}
+      activeOpacity={0.8}
+    >
+      {busy
+        ? <ActivityIndicator size="small" color="#fff" />
+        : <><Text style={styles.actionBtnIcon}>{icon}</Text><Text style={styles.actionBtnText}>{label}</Text></>
+      }
+    </TouchableOpacity>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  root            : { flex: 1, backgroundColor: '#020817' },
-  container       : { flex: 1 },
-  content         : { padding: 16 },
-  orb1            : { position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.07 },
-  orb2            : { position: 'absolute', top: 400, left: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.05 },
+  root             : { flex: 1, backgroundColor: '#020817' },
+  container        : { flex: 1 },
+  content          : { padding: 16 },
+  orb1             : { position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.07 },
+  orb2             : { position: 'absolute', top: 500, left: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.05 },
 
-  filterRow       : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 4, marginBottom: 16, borderWidth: 1, borderColor: '#1e293b' },
-  filterTab       : { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  filterTabActive : { backgroundColor: '#1e40af' },
-  filterTabText   : { fontSize: 12, fontWeight: '600', color: '#475569' },
-  filterTabTextActive: { color: '#93c5fd' },
+  sectionHeader    : { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 8 },
+  sectionLine      : { flex: 1, height: 1, backgroundColor: '#1e293b' },
+  sectionTitle     : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 2 },
 
-  summaryBar      : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#1e293b' },
-  summaryItem     : { flex: 1, alignItems: 'center' },
-  summaryNum      : { fontSize: 22, fontWeight: '800', color: '#3b82f6' },
-  summaryLbl      : { fontSize: 11, color: '#475569', marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  summaryDivider  : { width: 1, backgroundColor: '#1e293b', marginVertical: 4 },
+  // Summary cards (2×2)
+  summaryGrid      : { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  summaryCard      : { width: (width - 42) / 2, borderRadius: 14, padding: 14, borderWidth: 1, alignItems: 'center', gap: 3 },
+  summaryIcon      : { fontSize: 20 },
+  summaryValue     : { fontSize: 26, fontWeight: '800' },
+  summaryLabel     : { fontSize: 10, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  empty           : { alignItems: 'center', marginTop: 80, gap: 10 },
-  emptyIcon       : { fontSize: 52 },
-  emptyText       : { color: '#94a3b8', fontSize: 18, fontWeight: '700' },
-  emptySubText    : { color: '#475569', fontSize: 13 },
+  // Chart
+  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
+  chart            : { borderRadius: 8, marginLeft: -8 },
 
-  sectionHeader   : { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 4 },
-  sectionLine     : { flex: 1, height: 1, backgroundColor: '#1e293b' },
-  sectionTitle    : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 2 },
+  // Date range picker
+  dateRangeCard    : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, gap: 14 },
+  dateRow          : { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  datePicker       : { flex: 1, gap: 6 },
+  datePickerLabel  : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
+  dateBtn          : { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1e293b', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#334155' },
+  dateBtnIcon      : { fontSize: 14 },
+  dateBtnText      : { color: '#93c5fd', fontSize: 13, fontWeight: '600', flex: 1 },
+  dateArrow        : { paddingTop: 18 },
+  dateArrowText    : { color: '#334155', fontSize: 18 },
+  applyBtn         : { backgroundColor: '#1e40af', borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)' },
+  applyBtnText     : { color: '#93c5fd', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
 
-  totalsCard      : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 24, overflow: 'hidden' },
-  totalRow        : { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  totalRowBorder  : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  totalLeft       : { flex: 1 },
-  totalName       : { color: '#f1f5f9', fontSize: 14, fontWeight: '600' },
-  totalEmpId      : { color: '#475569', fontSize: 12, marginTop: 1 },
-  totalBadge      : { backgroundColor: 'rgba(59,130,246,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
-  totalBadgeText  : { color: '#60a5fa', fontSize: 15, fontWeight: '800' },
+  // Summary bar (record count row)
+  summaryBar       : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#1e293b' },
+  summaryBarItem   : { flex: 1, alignItems: 'center' },
+  summaryBarNum    : { fontSize: 22, fontWeight: '800', color: '#3b82f6' },
+  summaryBarLbl    : { fontSize: 10, color: '#475569', marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryBarDivider: { width: 1, backgroundColor: '#1e293b', marginVertical: 4 },
 
-  dateGroup       : { marginBottom: 16 },
-  dateHeader      : { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
-  dateHeaderText  : { color: '#64748b', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  dateHeaderCount : { color: '#334155', fontSize: 11 },
-  dateCard        : { backgroundColor: '#0f172a', borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
+  // Worker totals
+  totalsCard       : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
+  totalRow         : { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  totalRowBorder   : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
+  totalLeft        : { flex: 1 },
+  totalName        : { color: '#f1f5f9', fontSize: 14, fontWeight: '600' },
+  totalEmpId       : { color: '#475569', fontSize: 12, marginTop: 1 },
+  totalBadge       : { backgroundColor: 'rgba(59,130,246,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
+  totalBadgeText   : { color: '#60a5fa', fontSize: 15, fontWeight: '800' },
 
-  recordRow       : { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
-  recordRowBorder : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  recordLeft      : { flex: 1 },
-  recordName      : { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
-  recordEmpId     : { color: '#475569', fontSize: 12, marginTop: 1 },
-  recordRight     : { alignItems: 'flex-end', gap: 2 },
-  recordTime      : { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
-  recordDay       : { color: '#334155', fontSize: 11 },
+  // Date-grouped records
+  dateGroup        : { marginBottom: 14 },
+  dateHeader       : { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
+  dateHeaderText   : { color: '#64748b', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  dateHeaderCount  : { color: '#334155', fontSize: 11 },
+  dateCard         : { backgroundColor: '#0f172a', borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
+  recordRow        : { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  recordRowBorder  : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
+  recordLeft       : { flex: 1 },
+  recordName       : { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
+  recordEmpId      : { color: '#475569', fontSize: 12, marginTop: 1 },
+  recordRight      : { alignItems: 'flex-end', gap: 2 },
+  recordTime       : { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
+  recordDay        : { color: '#334155', fontSize: 11 },
 
-  actionBar       : { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 20, backgroundColor: '#020817', borderTopWidth: 1, borderTopColor: '#1e293b' },
-  actionBtn       : { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14 },
-  actionBtnBusy   : { opacity: 0.6 },
-  actionBtnIcon   : { fontSize: 18 },
-  actionBtnText   : { color: '#fff', fontSize: 14, fontWeight: '700' },
-  actionBtnCSV    : { backgroundColor: '#059669' },
-  actionBtnPDF    : { backgroundColor: '#dc2626' },
-  actionBtnXLS    : { backgroundColor: '#d97706' },
+  // Empty
+  empty            : { alignItems: 'center', marginTop: 60, marginBottom: 40, gap: 10 },
+  emptyIcon        : { fontSize: 48 },
+  emptyText        : { color: '#94a3b8', fontSize: 18, fontWeight: '700' },
+  emptySubText     : { color: '#475569', fontSize: 13, textAlign: 'center' },
+
+  // Export bar
+  actionBar        : { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 20, backgroundColor: '#020817', borderTopWidth: 1, borderTopColor: '#1e293b' },
+  actionBtn        : { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14 },
+  actionBtnBusy    : { opacity: 0.5 },
+  actionBtnIcon    : { fontSize: 17 },
+  actionBtnText    : { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

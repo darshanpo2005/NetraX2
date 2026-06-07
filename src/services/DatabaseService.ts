@@ -336,6 +336,46 @@ export const getWorkerStreaks = async (): Promise<WorkerStreak[]> => {
   );
 };
 
+/** Attendance rows between two timestamps (inclusive). */
+export const getAttendanceByDateRange = async (
+  fromTs: number,
+  toTs: number
+): Promise<AttendanceRow[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync(
+    `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+       FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
+      WHERE a.timestamp >= ? AND a.timestamp <= ?
+      ORDER BY a.timestamp DESC`,
+    [fromTs, toTs]
+  ) as any[];
+  return rows.map(r => {
+    const d = new Date(r.timestamp);
+    return {
+      workerName: r.worker_name,
+      employeeId: r.emp_id ?? '',
+      timestamp : r.timestamp,
+      similarity: r.similarity,
+      location  : r.location ?? '',
+      date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      day : d.toLocaleDateString('en-IN', { weekday: 'long' }),
+    };
+  });
+};
+
+/** Unique-attendee count per day for the last 7 days, oldest→newest. */
+export const getWeeklyStats = async (): Promise<{ day: string; count: number }[]> => {
+  const data = await getWeeklyAttendance();
+  return data.map(d => ({ day: d.label, count: d.count }));
+};
+
+/** Total enrolled workers vs. how many attended today. */
+export const getTodayStats = async (): Promise<{ total: number; present: number; absent: number }> => {
+  const [total, present] = await Promise.all([getWorkerCount(), getTodayAttendanceCount()]);
+  return { total, present, absent: Math.max(0, total - present) };
+};
+
 export const getAllWorkerEmbeddings = async (): Promise<Array<{
   id: string;
   name: string;
