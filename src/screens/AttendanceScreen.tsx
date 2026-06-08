@@ -310,8 +310,10 @@ export default function AttendanceScreen({ navigation }: any) {
     return (
       <View style={styles.cameraContainer}>
         <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
-          device={device} isActive={true} photo={true} />
+          device={device} isActive={true} photo={true}
+          videoStabilizationMode="auto" />
         <View style={styles.dimOverlay} />
+        <View style={styles.brightOverlay} />
 
         {/* Face oval + pulse ring */}
         <View style={styles.faceOvalContainer}>
@@ -384,8 +386,10 @@ export default function AttendanceScreen({ navigation }: any) {
   if (step === 'scanning') return (
     <View style={styles.cameraContainer}>
       <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
-        device={device} isActive={true} photo={true} />
+        device={device} isActive={true} photo={true}
+        videoStabilizationMode="auto" />
       <View style={styles.dimOverlay} />
+      <View style={styles.brightOverlay} />
       <View style={styles.scanningOverlay}>
         <View style={[styles.faceOval, { borderColor: '#f59e0b', borderStyle: 'dashed' }]} />
         <View style={styles.scanLine} />
@@ -485,7 +489,8 @@ export default function AttendanceScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   cameraContainer  : { flex: 1, backgroundColor: '#000' },
-  dimOverlay       : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  dimOverlay       : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)' },
+  brightOverlay    : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.05)', pointerEvents: 'none' },
 
   faceOvalContainer: { position: 'absolute', top: '8%', alignSelf: 'center', alignItems: 'center', gap: 12 },
   pulseRing        : { position: 'absolute', width: 220, height: 290, borderRadius: 110, borderWidth: 2, borderColor: '#3b82f6' },

@@ -213,7 +213,8 @@ export default function EnrollScreen({ navigation }: any) {
     return (
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
-          device={device} isActive={true} photo={true} />
+          device={device} isActive={true} photo={true}
+          videoStabilizationMode="auto" />
         <View style={styles.overlay}>
           {/* Face guide oval */}
           <View style={styles.faceGuide} />
