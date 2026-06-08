@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
-  Dimensions, ActivityIndicator,
+  Dimensions, ActivityIndicator, Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BarChart from '../components/BarChart';
@@ -131,6 +131,15 @@ export default function DashboardScreen() {
               key={w.workerId}
               style={[styles.workerRow, i < streaks.length - 1 && styles.workerRowBorder]}
             >
+              {/* Avatar or initials */}
+              {w.photoUri ? (
+                <Image source={{ uri: w.photoUri }} style={styles.workerPhoto} />
+              ) : (
+                <View style={styles.workerInitials}>
+                  <Text style={styles.workerInitialsText}>{w.workerName[0]?.toUpperCase()}</Text>
+                </View>
+              )}
+
               {/* Status dot */}
               <View style={[styles.statusDot, { backgroundColor: w.presentToday ? '#10b981' : '#ef4444' }]} />
 
@@ -203,9 +212,12 @@ const styles = StyleSheet.create({
 
   listCard         : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
   emptyText        : { color: '#475569', textAlign: 'center', padding: 24, fontSize: 13 },
-  workerRow        : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  workerRow        : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
   workerRowBorder  : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  statusDot        : { width: 10, height: 10, borderRadius: 5 },
+  workerPhoto      : { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: '#3b82f6' },
+  workerInitials   : { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', alignItems: 'center', justifyContent: 'center' },
+  workerInitialsText: { color: '#60a5fa', fontSize: 14, fontWeight: '700' },
+  statusDot        : { width: 8, height: 8, borderRadius: 4 },
   workerInfo       : { flex: 1, gap: 2 },
   workerName       : { fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
   workerSub        : { fontSize: 12, color: '#475569' },

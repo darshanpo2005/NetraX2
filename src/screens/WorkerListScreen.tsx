@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, Dimensions, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllWorkers, deleteWorker, Worker } from '../services/DatabaseService';
 
@@ -70,9 +70,13 @@ export default function WorkerListScreen({ navigation }: any) {
                 <View style={[styles.cardAccent, { backgroundColor: color }]} />
 
                 {/* Avatar */}
-                <View style={[styles.avatar, { backgroundColor: `${color}20`, borderColor: `${color}40` }]}>
-                  <Text style={[styles.avatarText, { color }]}>{item.name[0].toUpperCase()}</Text>
-                </View>
+                {item.photoUri ? (
+                  <Image source={{ uri: item.photoUri }} style={styles.photoAvatar} />
+                ) : (
+                  <View style={[styles.avatar, { backgroundColor: `${color}20`, borderColor: `${color}40` }]}>
+                    <Text style={[styles.avatarText, { color }]}>{item.name[0].toUpperCase()}</Text>
+                  </View>
+                )}
 
                 {/* Info */}
                 <View style={styles.cardInfo}>
@@ -124,7 +128,8 @@ const styles = StyleSheet.create({
   emptyBtnText : { color: '#fff', fontWeight: '700', fontSize: 14 },
   card         : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
   cardAccent   : { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: 2 },
-  avatar       : { width: 48, height: 48, borderRadius: 24, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 14, marginLeft: 8 },
+  avatar       : { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 14, marginLeft: 8 },
+  photoAvatar  : { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#3b82f6', marginRight: 14, marginLeft: 8 },
   avatarText   : { fontSize: 20, fontWeight: '800' },
   cardInfo     : { flex: 1, gap: 4 },
   workerName   : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },

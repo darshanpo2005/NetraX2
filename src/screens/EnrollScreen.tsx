@@ -5,9 +5,11 @@ import {
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { addWorker, workerExists, getAllWorkerEmbeddings } from '../services/DatabaseService';
 import { l2Normalize, cosineSimilarity } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
+import { notifyWorkerRegistered } from '../services/NotificationService';
 
 const REQUIRED_CAPTURES = 5;
 
@@ -51,6 +53,7 @@ export default function EnrollScreen({ navigation }: any) {
   const cameraRef        = useRef<Camera>(null);
   const embeddingsRef    = useRef<number[][]>([]);
   const isCapturingRef   = useRef(false);
+  const firstPhotoUriRef = useRef<string | null>(null);
 
   // One Animated.Value per dot — bounce on capture
   const dotAnims = useRef(
@@ -93,6 +96,17 @@ export default function EnrollScreen({ navigation }: any) {
 
       embeddingsRef.current = [...embeddingsRef.current, result.embedding];
       const newCount = embeddingsRef.current.length;
+
+      // Persist first capture as the profile photo
+      if (newCount === 1) {
+        try {
+          const dest = `${FileSystem.documentDirectory}profile_${Date.now()}.jpg`;
+          await FileSystem.copyAsync({ from: uri, to: dest });
+          firstPhotoUriRef.current = dest;
+        } catch {
+          firstPhotoUriRef.current = null;
+        }
+      }
       setCaptures(newCount);
 
       // Bounce animation on the dot just filled
@@ -140,8 +154,11 @@ export default function EnrollScreen({ navigation }: any) {
           employeeId: empId.trim(),
           embedding : normalizedAvg,
           createdAt : Date.now(),
+          photoUri  : firstPhotoUriRef.current,
         });
+        notifyWorkerRegistered(name.trim());
         embeddingsRef.current = [];
+        firstPhotoUriRef.current = null;
         setStep('done');
       } else {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -288,6 +305,7 @@ export default function EnrollScreen({ navigation }: any) {
           setName(''); setEmpId(''); setStep('form');
           setCaptures(0); setStatus('');
           embeddingsRef.current = [];
+          firstPhotoUriRef.current = null;
           dotAnims.forEach(a => a.setValue(1));
         }}>
         <Text style={styles.btnText}>Register Another</Text>

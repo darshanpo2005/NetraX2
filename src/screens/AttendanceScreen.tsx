@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Animated,
+  StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import FaceDetector from '@react-native-ml-kit/face-detection';
@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
+import { notifyAttendanceMarked } from '../services/NotificationService';
 
 const CHALLENGE     = { text: 'Blink your eyes', emoji: '😉', instruction: 'Blink slowly once' };
 const LIVENESS_SECS = 12;
@@ -20,6 +21,7 @@ type ResultType = {
   sim?: number;
   message: string;
   detail?: string;
+  photoUri?: string | null;
 };
 
 export default function AttendanceScreen({ navigation }: any) {
@@ -119,17 +121,25 @@ export default function AttendanceScreen({ navigation }: any) {
       const match = findBestMatch(l2Normalize(embResult.embedding), workers);
 
       if (match.matched && match.workerId) {
+        const now = Date.now();
         await logAttendance({
-          id        : `att_${Date.now()}`,
+          id        : `att_${now}`,
           workerId  : match.workerId,
           workerName: match.workerName!,
-          timestamp : Date.now(),
+          timestamp : now,
           similarity: match.similarity,
           synced    : 0,
           location  : 'Field Site',
         });
+        const matchedWorker = workers.find(w => w.id === match.workerId);
+        const timeStr = new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        notifyAttendanceMarked(match.workerName!, timeStr);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setResult({ type: 'success', name: match.workerName!, sim: match.similarity, message: 'Identity Verified', detail: 'Attendance logged successfully.' });
+        setResult({
+          type: 'success', name: match.workerName!, sim: match.similarity,
+          message: 'Identity Verified', detail: 'Attendance logged successfully.',
+          photoUri: matchedWorker?.photoUri ?? null,
+        });
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setResult({
@@ -410,6 +420,9 @@ export default function AttendanceScreen({ navigation }: any) {
 
           {result.type === 'success' && (
             <>
+              {result.photoUri ? (
+                <Image source={{ uri: result.photoUri }} style={styles.successPhoto} />
+              ) : null}
               <Text style={styles.workerName}>{result.name}</Text>
               <View style={styles.simContainer}>
                 <Text style={styles.simLabel}>Match Confidence</Text>
@@ -516,6 +529,7 @@ const styles = StyleSheet.create({
   resultCard       : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, alignItems: 'center', gap: 12 },
   resultIcon       : { fontSize: 64, marginBottom: 4 },
   resultTitle      : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  successPhoto     : { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#10b981' },
   workerName       : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
   simContainer     : { width: '100%', gap: 6 },
   simLabel         : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },

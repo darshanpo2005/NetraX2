@@ -6,6 +6,7 @@ export interface Worker {
   employeeId: string;
   embedding: number[];
   createdAt: number;
+  photoUri?: string | null;
 }
 
 export interface AttendanceLog {
@@ -33,7 +34,8 @@ export const initDatabase = async () => {
       name TEXT NOT NULL,
       employee_id TEXT NOT NULL UNIQUE,
       embedding TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      photo_uri TEXT
     );
     CREATE TABLE IF NOT EXISTS attendance_log (
       id TEXT PRIMARY KEY,
@@ -45,13 +47,19 @@ export const initDatabase = async () => {
       location TEXT DEFAULT ''
     );
   `);
+  // Migration: add photo_uri for existing databases that don't have it yet
+  try {
+    await database.execAsync('ALTER TABLE workers ADD COLUMN photo_uri TEXT');
+  } catch {
+    // Column already exists — safe to ignore
+  }
 };
 
 export const addWorker = async (worker: Worker) => {
   const database = getDb();
   await database.runAsync(
-    'INSERT INTO workers (id, name, employee_id, embedding, created_at) VALUES (?, ?, ?, ?, ?)',
-    [worker.id, worker.name, worker.employeeId, JSON.stringify(worker.embedding), worker.createdAt]
+    'INSERT INTO workers (id, name, employee_id, embedding, created_at, photo_uri) VALUES (?, ?, ?, ?, ?, ?)',
+    [worker.id, worker.name, worker.employeeId, JSON.stringify(worker.embedding), worker.createdAt, worker.photoUri ?? null]
   );
 };
 
@@ -61,6 +69,7 @@ export const getAllWorkers = async (): Promise<Worker[]> => {
   return rows.map(r => ({
     id: r.id, name: r.name, employeeId: r.employee_id,
     embedding: JSON.parse(r.embedding), createdAt: r.created_at,
+    photoUri: r.photo_uri ?? null,
   }));
 };
 
@@ -286,6 +295,7 @@ export interface WorkerStreak {
   streak: number;
   lastSeen: number | null;
   presentToday: boolean;
+  photoUri?: string | null;
 }
 
 /** Consecutive-day attendance streak for every enrolled worker. */
@@ -327,6 +337,7 @@ export const getWorkerStreaks = async (): Promise<WorkerStreak[]> => {
       streak,
       lastSeen: rows[0]?.last_seen ?? null,
       presentToday,
+      photoUri: w.photoUri ?? null,
     });
   }
 

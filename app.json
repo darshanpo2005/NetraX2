@@ -41,6 +41,12 @@
         {
           "cameraPermission": "NetraX requires camera access for face recognition"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png"
+        }
       ]
     ],
     "extra": {
