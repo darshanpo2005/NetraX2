@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, Image, TextInput,
 } from 'react-native';
+import Animated, { SlideInLeft } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllWorkers, getTodayPresentWorkerIds, deleteWorker, Worker } from '../services/DatabaseService';
 
@@ -139,6 +140,7 @@ export default function WorkerListScreen({ navigation }: any) {
             const color = getColor(item.name);
             const isPresent = todayPresentIds.has(item.id);
             return (
+              <Animated.View entering={SlideInLeft.delay(Math.min(index, 7) * 55).springify()}>
               <TouchableOpacity
                 style={styles.card}
                 onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
@@ -180,6 +182,7 @@ export default function WorkerListScreen({ navigation }: any) {
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
+              </Animated.View>
             );
           }}
         />

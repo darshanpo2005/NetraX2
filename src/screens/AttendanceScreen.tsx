@@ -3,6 +3,11 @@ import {
   View, Text, TouchableOpacity,
   StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
+import ReAnimated, {
+  useSharedValue, useAnimatedStyle,
+  withSpring, withTiming, withSequence,
+  ZoomIn, FadeInDown,
+} from 'react-native-reanimated';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import FaceDetector from '@react-native-ml-kit/face-detection';
 import * as Haptics from 'expo-haptics';
@@ -42,7 +47,30 @@ export default function AttendanceScreen({ navigation }: any) {
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
-  // ─── Animations ──────────────────────────────────────────────────────────
+  // ─── Reanimated — result card ────────────────────────────────────────────
+  const resultShakeX = useSharedValue(0);
+  const resultCardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: resultShakeX.value }],
+  }));
+
+  useEffect(() => {
+    if (!result) { resultShakeX.value = 0; return; }
+    if (result.type !== 'success') {
+      // Shake after entrance animation completes (~300 ms)
+      const t = setTimeout(() => {
+        resultShakeX.value = withSequence(
+          withTiming(-12, { duration: 55 }),
+          withTiming(12,  { duration: 55 }),
+          withTiming(-8,  { duration: 55 }),
+          withTiming(8,   { duration: 55 }),
+          withTiming(0,   { duration: 55 }),
+        );
+      }, 320);
+      return () => clearTimeout(t);
+    }
+  }, [result]);
+
+  // ─── RN Animated — liveness camera UI ───────────────────────────────────
   const ovalColorAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim     = useRef(new Animated.Value(0)).current;
   const pulseLoopRef  = useRef<Animated.CompositeAnimation | null>(null);
@@ -416,7 +444,10 @@ export default function AttendanceScreen({ navigation }: any) {
       <View style={styles.resultContainer}>
         <View style={styles.orb1} /><View style={styles.orb2} />
 
-        <View style={[styles.resultCard, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+        <ReAnimated.View
+          entering={result.type === 'success' ? ZoomIn.springify().damping(12) : FadeInDown.duration(300)}
+          style={[styles.resultCard, { backgroundColor: cfg.bg, borderColor: cfg.border }, resultCardStyle]}
+        >
           <Text style={styles.resultIcon}>{cfg.icon}</Text>
           <Text style={[styles.resultTitle, { color: cfg.color }]}>{result.message}</Text>
 
@@ -472,7 +503,7 @@ export default function AttendanceScreen({ navigation }: any) {
               </View>
             </View>
           )}
-        </View>
+        </ReAnimated.View>
 
         <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
           <Text style={styles.retryBtnText}>Try Again</Text>

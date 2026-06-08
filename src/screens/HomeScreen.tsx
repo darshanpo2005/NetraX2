@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, RefreshControl, Dimensions, Alert
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
 import { syncAndPurge, isOnline, isSyncConfigured } from '../services/SyncService';
@@ -74,7 +75,7 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.orb2} />
 
       {/* Header Card */}
-      <View style={styles.headerCard}>
+      <Animated.View entering={FadeInDown.delay(0).duration(500)} style={styles.headerCard}>
         <View style={styles.headerLeft}>
           <Text style={styles.timeText}>{timeStr}</Text>
           <Text style={styles.dateText}>{dateStr}</Text>
@@ -90,10 +91,10 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.logoIcon}>🔐</Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Stats Row */}
-      <View style={styles.statsRow}>
+      <Animated.View entering={FadeInDown.delay(150).duration(500)} style={styles.statsRow}>
         {[
           { label: 'Workers',   value: stats.workers, icon: '👥', color: '#3b82f6' },
           { label: 'Today',     value: stats.today,   icon: '✅', color: '#10b981' },
@@ -105,33 +106,38 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.statLabel}>{stat.label}</Text>
           </View>
         ))}
-      </View>
+      </Animated.View>
 
       {/* Section title */}
-      <View style={styles.sectionHeader}>
+      <Animated.View entering={FadeInDown.delay(280).duration(400)} style={styles.sectionHeader}>
         <View style={styles.sectionLine} />
         <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
         <View style={styles.sectionLine} />
-      </View>
+      </Animated.View>
 
       {/* Action Grid */}
       <View style={styles.grid}>
-        {actions.map(action => (
-          <TouchableOpacity
+        {actions.map((action, index) => (
+          <Animated.View
             key={action.screen}
-            style={[styles.actionCard, { backgroundColor: action.bg, borderColor: action.border }]}
-            onPress={() => navigation.navigate(action.screen)}
-            activeOpacity={0.7}
+            entering={FadeInDown.delay(340 + index * 70).duration(400)}
+            style={{ width: (width - 52) / 2 }}
           >
-            <View style={[styles.actionIconBg, { backgroundColor: action.bg, borderColor: action.border }]}>
-              <Text style={styles.actionIcon}>{action.icon}</Text>
-            </View>
-            <Text style={[styles.actionLabel, { color: '#f1f5f9' }]}>{action.label}</Text>
-            <Text style={styles.actionSub}>{action.sub}</Text>
-            <View style={[styles.actionArrow, { backgroundColor: action.color }]}>
-              <Text style={styles.arrowText}>→</Text>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: action.bg, borderColor: action.border }]}
+              onPress={() => navigation.navigate(action.screen)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionIconBg, { backgroundColor: action.bg, borderColor: action.border }]}>
+                <Text style={styles.actionIcon}>{action.icon}</Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: '#f1f5f9' }]}>{action.label}</Text>
+              <Text style={styles.actionSub}>{action.sub}</Text>
+              <View style={[styles.actionArrow, { backgroundColor: action.color }]}>
+                <Text style={styles.arrowText}>→</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
         ))}
       </View>
 
@@ -208,7 +214,7 @@ const styles = StyleSheet.create({
   sectionLine  : { flex: 1, height: 1, backgroundColor: '#1e293b' },
   sectionTitle : { fontSize: 11, color: '#475569', fontWeight: '700', letterSpacing: 2 },
   grid         : { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  actionCard   : { width: (width - 52) / 2, borderRadius: 20, padding: 18, borderWidth: 1, gap: 8, position: 'relative', overflow: 'hidden' },
+  actionCard   : { borderRadius: 20, padding: 18, borderWidth: 1, gap: 8, position: 'relative', overflow: 'hidden' },
   actionIconBg : { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   actionIcon   : { fontSize: 20 },
   actionLabel  : { fontSize: 15, fontWeight: '700', lineHeight: 20 },
