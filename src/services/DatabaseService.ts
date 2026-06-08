@@ -387,6 +387,74 @@ export const getTodayStats = async (): Promise<{ total: number; present: number;
   return { total, present, absent: Math.max(0, total - present) };
 };
 
+export const getTodayPresentWorkerIds = async (): Promise<Set<string>> => {
+  const database = getDb();
+  const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+  const rows = await database.getAllAsync(
+    'SELECT DISTINCT worker_id FROM attendance_log WHERE timestamp >= ?',
+    [startOfDay.getTime()]
+  ) as any[];
+  return new Set(rows.map((r: any) => r.worker_id));
+};
+
+export const getWorkerAttendanceHistory = async (workerId: string): Promise<AttendanceLog[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync(
+    'SELECT * FROM attendance_log WHERE worker_id = ? ORDER BY timestamp DESC',
+    [workerId]
+  ) as any[];
+  return rows.map((r: any) => ({
+    id: r.id, workerId: r.worker_id, workerName: r.worker_name,
+    timestamp: r.timestamp, similarity: r.similarity,
+    synced: r.synced, location: r.location,
+  }));
+};
+
+export interface WorkerStats {
+  total: number;
+  thisWeek: number;
+  thisMonth: number;
+  streak: number;
+  lastSeen: number | null;
+}
+
+export const getWorkerStats = async (workerId: string): Promise<WorkerStats> => {
+  const database = getDb();
+  const now = Date.now();
+  const weekAgo  = now - 7  * 86_400_000;
+  const monthAgo = now - 30 * 86_400_000;
+
+  const [totalRow, weekRow, monthRow, lastRow] = await Promise.all([
+    database.getFirstAsync('SELECT COUNT(*) as count FROM attendance_log WHERE worker_id = ?', [workerId]),
+    database.getFirstAsync('SELECT COUNT(*) as count FROM attendance_log WHERE worker_id = ? AND timestamp >= ?', [workerId, weekAgo]),
+    database.getFirstAsync('SELECT COUNT(*) as count FROM attendance_log WHERE worker_id = ? AND timestamp >= ?', [workerId, monthAgo]),
+    database.getFirstAsync('SELECT MAX(timestamp) as last FROM attendance_log WHERE worker_id = ?', [workerId]),
+  ]) as any[];
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dayRows = await database.getAllAsync(
+    `SELECT DISTINCT CAST(timestamp / 86400000 AS INTEGER) AS day_idx
+       FROM attendance_log WHERE worker_id = ? ORDER BY day_idx DESC`,
+    [workerId]
+  ) as any[];
+
+  let streak = 0;
+  let expected = Math.floor(today.getTime() / 86_400_000);
+  if (dayRows.length === 0 || dayRows[0].day_idx !== expected) expected -= 1;
+  for (const row of dayRows) {
+    if (row.day_idx === expected) { streak++; expected--; }
+    else break;
+  }
+
+  return {
+    total     : totalRow?.count  ?? 0,
+    thisWeek  : weekRow?.count   ?? 0,
+    thisMonth : monthRow?.count  ?? 0,
+    streak,
+    lastSeen  : lastRow?.last    ?? null,
+  };
+};
+
 export const getAllWorkerEmbeddings = async (): Promise<Array<{
   id: string;
   name: string;

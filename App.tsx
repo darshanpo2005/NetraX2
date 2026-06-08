@@ -8,6 +8,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import EnrollScreen from './src/screens/EnrollScreen';
 import AttendanceScreen from './src/screens/AttendanceScreen';
 import WorkerListScreen from './src/screens/WorkerListScreen';
+import WorkerDetailScreen from './src/screens/WorkerDetailScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import AttendanceReportScreen from './src/screens/AttendanceReportScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -32,7 +33,8 @@ export default function App() {
         <Stack.Screen name="Home"        component={HomeScreen}       options={{ title: 'NetraX 2.0', headerLeft: () => null }} />
         <Stack.Screen name="Enroll"      component={EnrollScreen}     options={{ title: 'Register Worker' }} />
         <Stack.Screen name="Attendance"  component={AttendanceScreen} options={{ title: 'Face Authentication' }} />
-        <Stack.Screen name="WorkerList"  component={WorkerListScreen} options={{ title: 'Workforce' }} />
+        <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
+        <Stack.Screen name="WorkerDetail" component={WorkerDetailScreen} options={{ title: 'Worker Profile' }} />
         <Stack.Screen name="Admin"       component={AdminScreen}           options={{ title: 'Admin Console' }} />
         <Stack.Screen name="Reports"     component={AttendanceReportScreen} options={{ title: 'Attendance Reports' }} />
         <Stack.Screen name="Dashboard"   component={DashboardScreen}        options={{ title: 'Dashboard' }} />
