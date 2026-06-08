@@ -3,7 +3,6 @@ import {
   View, Text, TouchableOpacity,
   StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import FaceDetector from '@react-native-ml-kit/face-detection';
 import * as Haptics from 'expo-haptics';
@@ -438,10 +437,8 @@ export default function AttendanceScreen({ navigation }: any) {
   if (step === 'result' && result) {
     const isSuccess = result.type === 'success';
     const isWarn    = result.type === 'no_match';
-    const gradColors: readonly [string, string, string] =
-      isSuccess ? ['#052e16', '#064e3b', '#065f46'] :
-      isWarn    ? ['#2d1000', '#451a00', '#713f12'] :
-                  ['#2d0a0a', '#450a0a', '#7f1d1d'];
+    const cardBg    = isSuccess ? '#052e1e' : isWarn ? '#2d1a00' : '#2d0a0a';
+    const cardBorder = isSuccess ? 'rgba(74,222,128,0.25)' : isWarn ? 'rgba(251,191,36,0.25)' : 'rgba(248,113,113,0.25)';
     const accentColor = isSuccess ? '#4ade80' : isWarn ? '#fbbf24' : '#f87171';
 
     return (
@@ -452,7 +449,7 @@ export default function AttendanceScreen({ navigation }: any) {
           opacity: resultFadeAnim,
           transform: [{ scale: resultScaleAnim }, { translateX: resultShakeAnim }],
         }]}>
-          <LinearGradient colors={gradColors} style={styles.resultCard}>
+          <View style={[styles.resultCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             {isSuccess ? (
               <>
                 <Text style={styles.confetti}>🎉  🎊  🎉</Text>
@@ -468,11 +465,7 @@ export default function AttendanceScreen({ navigation }: any) {
                 <View style={styles.simContainer}>
                   <Text style={styles.simLabel}>Match Confidence</Text>
                   <View style={styles.simBar}>
-                    <LinearGradient
-                      colors={['#4ade80', '#22c55e']}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any }]}
-                    />
+                    <View style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any, backgroundColor: '#4ade80' }]} />
                   </View>
                   <Text style={[styles.simValue, { color: accentColor }]}>{((result.sim || 0) * 100).toFixed(1)}%</Text>
                 </View>
@@ -514,13 +507,13 @@ export default function AttendanceScreen({ navigation }: any) {
                 </View>
                 {/* Retry inside fail card */}
                 <TouchableOpacity onPress={handleRetry} activeOpacity={0.8} style={{ width: '100%', marginTop: 4 }}>
-                  <LinearGradient colors={['#2563eb', '#4f46e5']} style={styles.retryBtnInner}>
+                  <View style={styles.retryBtnInner}>
                     <Text style={styles.retryBtnText}>↺  Try Again</Text>
-                  </LinearGradient>
+                  </View>
                 </TouchableOpacity>
               </>
             )}
-          </LinearGradient>
+          </View>
         </Animated.View>
 
         {isSuccess && (
@@ -598,7 +591,7 @@ const styles = StyleSheet.create({
   tipsBox               : { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   tipsTitle             : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
   tipItem               : { color: '#475569', fontSize: 12, lineHeight: 18 },
-  retryBtnInner         : { borderRadius: 14, padding: 14, alignItems: 'center' },
+  retryBtnInner         : { borderRadius: 14, padding: 14, alignItems: 'center', backgroundColor: '#2563eb' },
   retryBtn              : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
   retryBtnText          : { color: '#fff', fontWeight: '700', fontSize: 16 },
   homeBtn          : { width: '100%', backgroundColor: '#0f172a', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b' },

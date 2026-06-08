@@ -3,7 +3,6 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, RefreshControl, Dimensions, Alert, Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
 import { syncAndPurge, isOnline, isSyncConfigured } from '../services/SyncService';
@@ -60,12 +59,12 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const actions = [
-    { icon: '👤', label: 'Register\nWorker',  sub: 'Enroll new field staff',      color: '#3b82f6', grad: ['#1e3a8a','#1e40af'] as const, screen: 'Enroll'     },
-    { icon: '🎯', label: 'Mark\nAttendance',  sub: 'Face scan authentication',    color: '#10b981', grad: ['#064e3b','#059669'] as const, screen: 'Attendance' },
-    { icon: '👥', label: 'View\nWorkforce',   sub: 'Manage registered staff',     color: '#a78bfa', grad: ['#3b0764','#6d28d9'] as const, screen: 'WorkerList' },
-    { icon: '⚡', label: 'Admin\nConsole',    sub: 'Benchmarks & system logs',    color: '#fbbf24', grad: ['#78350f','#b45309'] as const, screen: 'Admin'      },
-    { icon: '📊', label: 'View\nReports',     sub: 'Attendance history & export', color: '#38bdf8', grad: ['#0c4a6e','#0369a1'] as const, screen: 'Reports'    },
-    { icon: '📈', label: 'Dashboard',         sub: 'Charts & live statistics',    color: '#f472b6', grad: ['#831843','#be185d'] as const, screen: 'Dashboard'  },
+    { icon: '👤', label: 'Register\nWorker',  sub: 'Enroll new field staff',      color: '#3b82f6', bg: '#0f2447', screen: 'Enroll'     },
+    { icon: '🎯', label: 'Mark\nAttendance',  sub: 'Face scan authentication',    color: '#10b981', bg: '#0a2e1e', screen: 'Attendance' },
+    { icon: '👥', label: 'View\nWorkforce',   sub: 'Manage registered staff',     color: '#a78bfa', bg: '#1e0f3a', screen: 'WorkerList' },
+    { icon: '⚡', label: 'Admin\nConsole',    sub: 'Benchmarks & system logs',    color: '#fbbf24', bg: '#2a1a00', screen: 'Admin'      },
+    { icon: '📊', label: 'View\nReports',     sub: 'Attendance history & export', color: '#38bdf8', bg: '#0a2030', screen: 'Reports'    },
+    { icon: '📈', label: 'Dashboard',         sub: 'Charts & live statistics',    color: '#f472b6', bg: '#2a0a1e', screen: 'Dashboard'  },
   ];
 
   const now     = new Date();
@@ -73,9 +72,9 @@ export default function HomeScreen({ navigation }: any) {
   const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const statItems = [
-    { label: 'Workers', value: stats.workers, icon: '👥', colors: ['#1e3a8a', '#2563eb'] as const },
-    { label: 'Present',  value: stats.today,   icon: '✅', colors: ['#064e3b', '#059669'] as const },
-    { label: 'Pending',  value: stats.pending, icon: '⏳', colors: (stats.pending > 0 ? ['#78350f', '#d97706'] as const : ['#1e293b', '#334155'] as const) },
+    { label: 'Workers', value: stats.workers, icon: '👥', bg: '#1e3a5f', border: '#3B82F6' },
+    { label: 'Present',  value: stats.today,   icon: '✅', bg: '#1a3a2a', border: '#10B981' },
+    { label: 'Pending',  value: stats.pending, icon: '⏳', bg: stats.pending > 0 ? '#3a1a1a' : '#1a1f2a', border: stats.pending > 0 ? '#EF4444' : '#334155' },
   ];
 
   return (
@@ -87,17 +86,12 @@ export default function HomeScreen({ navigation }: any) {
     >
       {/* Header Banner */}
       <Animated.View style={slide(headerAnim)}>
-        <LinearGradient
-          colors={['#0f2460', '#1a1040', '#0f172a']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={styles.headerCard}
-        >
-          {/* Top row: brand + logo */}
+        <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <View style={styles.brandRow}>
-              <LinearGradient colors={['#3b82f6', '#6366f1']} style={styles.shieldBadge}>
+              <View style={styles.shieldBadge}>
                 <Text style={styles.shieldIcon}>🛡️</Text>
-              </LinearGradient>
+              </View>
               <View>
                 <Text style={styles.brandName}>NetraX</Text>
                 <Text style={styles.brandVer}>v2.0 · SECURE</Text>
@@ -108,20 +102,19 @@ export default function HomeScreen({ navigation }: any) {
               <Text style={[styles.netText, { color: online ? '#10b981' : '#ef4444' }]}>{online ? 'Online' : 'Offline'}</Text>
             </View>
           </View>
-          {/* Time */}
           <Text style={styles.timeText}>{timeStr}</Text>
           <Text style={styles.dateText}>{dateStr}</Text>
-        </LinearGradient>
+        </View>
       </Animated.View>
 
       {/* Stats Row */}
       <Animated.View style={[styles.statsRow, slide(statsAnim)]}>
         {statItems.map(stat => (
-          <LinearGradient key={stat.label} colors={stat.colors} style={styles.statCard}>
+          <View key={stat.label} style={[styles.statCard, { backgroundColor: stat.bg, borderColor: stat.border }]}>
             <Text style={styles.statIcon}>{stat.icon}</Text>
             <Text style={styles.statValue}>{stat.value}</Text>
             <Text style={styles.statLabel}>{stat.label}</Text>
-          </LinearGradient>
+          </View>
         ))}
       </Animated.View>
 
@@ -143,20 +136,16 @@ export default function HomeScreen({ navigation }: any) {
               onPress={() => navigation.navigate(action.screen)}
               activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={action.grad}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.actionCard}
-              >
-                <View style={styles.actionIconWrap}>
+              <View style={[styles.actionCard, { backgroundColor: action.bg, borderColor: `${action.color}40` }]}>
+                <View style={[styles.actionIconWrap, { backgroundColor: `${action.color}20` }]}>
                   <Text style={styles.actionIcon}>{action.icon}</Text>
                 </View>
-                <Text style={styles.actionLabel}>{action.label}</Text>
+                <Text style={[styles.actionLabel, { color: action.color }]}>{action.label}</Text>
                 <Text style={styles.actionSub}>{action.sub}</Text>
-                <View style={styles.actionArrow}>
-                  <Text style={styles.arrowText}>→</Text>
+                <View style={[styles.actionArrow, { backgroundColor: `${action.color}25` }]}>
+                  <Text style={[styles.arrowText, { color: action.color }]}>→</Text>
                 </View>
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </Animated.View>
         ))}
@@ -173,13 +162,11 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       ) : online ? (
         <TouchableOpacity style={[styles.syncBtn, syncing && { opacity: 0.7 }]} onPress={handleSync} disabled={syncing} activeOpacity={0.8}>
-          <LinearGradient colors={['#0c4a6e', '#0369a1']} style={styles.syncGrad}>
-            <Text style={styles.syncIcon}>{syncing ? '🔄' : '☁️'}</Text>
-            <View>
-              <Text style={styles.syncTitle}>{syncing ? 'Syncing to AWS...' : 'Sync to AWS'}</Text>
-              <Text style={styles.syncSub}>{stats.pending} records pending upload</Text>
-            </View>
-          </LinearGradient>
+          <Text style={styles.syncIcon}>{syncing ? '🔄' : '☁️'}</Text>
+          <View>
+            <Text style={styles.syncTitle}>{syncing ? 'Syncing to AWS...' : 'Sync to AWS'}</Text>
+            <Text style={styles.syncSub}>{stats.pending} records pending upload</Text>
+          </View>
         </TouchableOpacity>
       ) : (
         <View style={styles.offlineCard}>
@@ -211,21 +198,21 @@ const styles = StyleSheet.create({
   container       : { flex: 1, backgroundColor: '#020817' },
   content         : { padding: 16, paddingBottom: 40 },
 
-  headerCard      : { borderRadius: 24, padding: 20, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(59,130,246,0.2)', gap: 6 },
+  headerCard      : { borderRadius: 24, padding: 20, marginBottom: 14, backgroundColor: '#1E40AF', borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)', gap: 6 },
   headerTop       : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   brandRow        : { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  shieldBadge     : { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  shieldBadge     : { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   shieldIcon      : { fontSize: 22 },
   brandName       : { fontSize: 20, fontWeight: '900', color: '#f8fafc', letterSpacing: 0.5 },
-  brandVer        : { fontSize: 10, color: '#93c5fd', letterSpacing: 1.5, fontWeight: '600' },
+  brandVer        : { fontSize: 10, color: '#bfdbfe', letterSpacing: 1.5, fontWeight: '600' },
   netPill         : { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
   netDot          : { width: 7, height: 7, borderRadius: 3.5 },
   netText         : { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   timeText        : { fontSize: 44, fontWeight: '900', color: '#f8fafc', letterSpacing: -2 },
-  dateText        : { fontSize: 13, color: '#93c5fd', letterSpacing: 0.3 },
+  dateText        : { fontSize: 13, color: '#bfdbfe', letterSpacing: 0.3 },
 
   statsRow        : { flexDirection: 'row', gap: 10, marginBottom: 20 },
-  statCard        : { flex: 1, borderRadius: 20, padding: 16, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  statCard        : { flex: 1, borderRadius: 20, padding: 16, alignItems: 'center', gap: 4, borderWidth: 1.5 },
   statIcon        : { fontSize: 22 },
   statValue       : { fontSize: 30, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   statLabel       : { fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
@@ -235,16 +222,15 @@ const styles = StyleSheet.create({
   sectionTitle    : { fontSize: 11, color: '#475569', fontWeight: '700', letterSpacing: 2 },
 
   grid            : { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  actionCard      : { borderRadius: 20, padding: 18, gap: 8, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', minHeight: 140 },
-  actionIconWrap  : { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  actionCard      : { borderRadius: 20, padding: 18, gap: 8, position: 'relative', overflow: 'hidden', borderWidth: 1, minHeight: 140 },
+  actionIconWrap  : { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   actionIcon      : { fontSize: 22 },
-  actionLabel     : { fontSize: 15, fontWeight: '800', color: '#fff', lineHeight: 20 },
-  actionSub       : { fontSize: 11, color: 'rgba(255,255,255,0.55)', lineHeight: 16 },
-  actionArrow     : { position: 'absolute', bottom: 14, right: 14, width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  arrowText       : { color: '#fff', fontSize: 14, fontWeight: '700' },
+  actionLabel     : { fontSize: 15, fontWeight: '800', lineHeight: 20 },
+  actionSub       : { fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 16 },
+  actionArrow     : { position: 'absolute', bottom: 14, right: 14, width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  arrowText       : { fontSize: 14, fontWeight: '700' },
 
-  syncBtn         : { marginBottom: 12, borderRadius: 18, overflow: 'hidden' },
-  syncGrad        : { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, borderRadius: 18 },
+  syncBtn         : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#0c3a5e', borderRadius: 18, padding: 18, borderWidth: 1, borderColor: '#0369a1', marginBottom: 12 },
   syncIcon        : { fontSize: 28 },
   syncTitle       : { color: '#bae6fd', fontSize: 15, fontWeight: '700' },
   syncSub         : { color: 'rgba(186,230,253,0.6)', fontSize: 12, marginTop: 2 },

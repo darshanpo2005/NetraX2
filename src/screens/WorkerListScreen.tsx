@@ -3,7 +3,6 @@ import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, Image, TextInput, Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
 function SlideCard({ index, children }: { index: number; children: React.ReactNode }) {
   const opacity    = useRef(new Animated.Value(0)).current;
@@ -163,11 +162,7 @@ export default function WorkerListScreen({ navigation }: any) {
                 onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
                 activeOpacity={0.75}
               >
-                <LinearGradient
-                  colors={[color, `${color}18`]}
-                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-                  style={styles.cardAccent}
-                />
+                <View style={[styles.cardAccent, { backgroundColor: color }]} />
 
                 {item.photoUri ? (
                   <Image source={{ uri: item.photoUri }} style={styles.photoAvatar} />
@@ -245,7 +240,7 @@ const styles = StyleSheet.create({
   emptyBtn          : { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
   emptyBtnText      : { color: '#fff', fontWeight: '700', fontSize: 14 },
   card              : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
-  cardAccent        : { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: 2 },
+  cardAccent        : { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
   avatar            : { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 14, marginLeft: 8 },
   photoAvatar       : { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#3b82f6', marginRight: 14, marginLeft: 8 },
   avatarText        : { fontSize: 20, fontWeight: '800' },
