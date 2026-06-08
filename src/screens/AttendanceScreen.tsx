@@ -3,11 +3,6 @@ import {
   View, Text, TouchableOpacity,
   StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
-import ReAnimated, {
-  useSharedValue, useAnimatedStyle,
-  withSpring, withTiming, withSequence,
-  ZoomIn, FadeInDown,
-} from 'react-native-reanimated';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import FaceDetector from '@react-native-ml-kit/face-detection';
 import * as Haptics from 'expo-haptics';
@@ -47,25 +42,34 @@ export default function AttendanceScreen({ navigation }: any) {
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
-  // ─── Reanimated — result card ────────────────────────────────────────────
-  const resultShakeX = useSharedValue(0);
-  const resultCardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: resultShakeX.value }],
-  }));
+  // ─── RN Animated — result card ───────────────────────────────────────────
+  const resultScaleAnim = useRef(new Animated.Value(0.8)).current;
+  const resultFadeAnim  = useRef(new Animated.Value(0)).current;
+  const resultShakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!result) { resultShakeX.value = 0; return; }
-    if (result.type !== 'success') {
-      // Shake after entrance animation completes (~300 ms)
+    if (!result) {
+      resultScaleAnim.setValue(0.8);
+      resultFadeAnim.setValue(0);
+      resultShakeAnim.setValue(0);
+      return;
+    }
+    // Fade + slide up entrance for all results
+    Animated.timing(resultFadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
+    if (result.type === 'success') {
+      Animated.spring(resultScaleAnim, { toValue: 1, useNativeDriver: true }).start();
+    } else {
+      resultScaleAnim.setValue(1);
+      // Shake after entrance
       const t = setTimeout(() => {
-        resultShakeX.value = withSequence(
-          withTiming(-12, { duration: 55 }),
-          withTiming(12,  { duration: 55 }),
-          withTiming(-8,  { duration: 55 }),
-          withTiming(8,   { duration: 55 }),
-          withTiming(0,   { duration: 55 }),
-        );
-      }, 320);
+        Animated.sequence([
+          Animated.timing(resultShakeAnim, { toValue: -12, duration: 55, useNativeDriver: true }),
+          Animated.timing(resultShakeAnim, { toValue:  12, duration: 55, useNativeDriver: true }),
+          Animated.timing(resultShakeAnim, { toValue:  -8, duration: 55, useNativeDriver: true }),
+          Animated.timing(resultShakeAnim, { toValue:   8, duration: 55, useNativeDriver: true }),
+          Animated.timing(resultShakeAnim, { toValue:   0, duration: 55, useNativeDriver: true }),
+        ]).start();
+      }, 370);
       return () => clearTimeout(t);
     }
   }, [result]);
@@ -444,10 +448,13 @@ export default function AttendanceScreen({ navigation }: any) {
       <View style={styles.resultContainer}>
         <View style={styles.orb1} /><View style={styles.orb2} />
 
-        <ReAnimated.View
-          entering={result.type === 'success' ? ZoomIn.springify().damping(12) : FadeInDown.duration(300)}
-          style={[styles.resultCard, { backgroundColor: cfg.bg, borderColor: cfg.border }, resultCardStyle]}
-        >
+        <Animated.View style={[styles.resultCard, { backgroundColor: cfg.bg, borderColor: cfg.border }, {
+          opacity: resultFadeAnim,
+          transform: [
+            { scale: resultScaleAnim },
+            { translateX: resultShakeAnim },
+          ],
+        }]}>
           <Text style={styles.resultIcon}>{cfg.icon}</Text>
           <Text style={[styles.resultTitle, { color: cfg.color }]}>{result.message}</Text>
 
@@ -503,7 +510,7 @@ export default function AttendanceScreen({ navigation }: any) {
               </View>
             </View>
           )}
-        </ReAnimated.View>
+        </Animated.View>
 
         <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
           <Text style={styles.retryBtnText}>Try Again</Text>

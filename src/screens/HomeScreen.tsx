@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, RefreshControl, Dimensions, Alert
+  ScrollView, RefreshControl, Dimensions, Alert, Animated,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
 import { syncAndPurge, isOnline, isSyncConfigured } from '../services/SyncService';
@@ -11,11 +10,37 @@ import { getModelInfo } from '../services/TFLiteService';
 
 const { width } = Dimensions.get('window');
 
+const NUM_CARDS = 6;
+
 export default function HomeScreen({ navigation }: any) {
-  const [stats, setStats]         = useState({ workers: 0, today: 0, pending: 0 });
-  const [online, setOnline]       = useState(false);
-  const [syncing, setSyncing]     = useState(false);
+  const [stats, setStats]           = useState({ workers: 0, today: 0, pending: 0 });
+  const [online, setOnline]         = useState(false);
+  const [syncing, setSyncing]       = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ─── Entrance animations (run once on mount) ─────────────────────────────
+  const headerAnim  = useRef(new Animated.Value(0)).current;
+  const statsAnim   = useRef(new Animated.Value(0)).current;
+  const sectionAnim = useRef(new Animated.Value(0)).current;
+  const cardAnims   = useRef(
+    Array.from({ length: NUM_CARDS }, () => new Animated.Value(0))
+  ).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(headerAnim,  { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.timing(statsAnim,   { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.timing(sectionAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.stagger(80, cardAnims.map(a =>
+        Animated.timing(a, { toValue: 1, duration: 350, useNativeDriver: true })
+      )),
+    ]).start();
+  }, []);
+
+  const slideStyle = (anim: Animated.Value) => ({
+    opacity: anim,
+    transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+  });
 
   const loadStats = async () => {
     const [workers, today, unsynced, net] = await Promise.all([
@@ -49,17 +74,16 @@ export default function HomeScreen({ navigation }: any) {
     alert(result.success ? `✅ Synced ${result.synced} records` : `❌ ${result.error}`);
   };
 
-
   const actions = [
-    { icon: '👤', label: 'Register\nWorker',   sub: 'Enroll new field staff', color: '#2563eb', bg: 'rgba(37,99,235,0.1)',  border: 'rgba(37,99,235,0.3)',  screen: 'Enroll'     },
-    { icon: '🎯', label: 'Mark\nAttendance',   sub: 'Face scan authentication', color: '#059669', bg: 'rgba(5,150,105,0.1)', border: 'rgba(5,150,105,0.3)',  screen: 'Attendance' },
-    { icon: '👥', label: 'View\nWorkforce',    sub: 'Manage registered staff', color: '#7c3aed', bg: 'rgba(124,58,237,0.1)', border: 'rgba(124,58,237,0.3)', screen: 'WorkerList' },
-    { icon: '⚡', label: 'Admin\nConsole',     sub: 'Benchmarks & system logs', color: '#d97706', bg: 'rgba(217,119,6,0.1)', border: 'rgba(217,119,6,0.3)', screen: 'Admin'      },
-    { icon: '📊', label: 'View\nReports',      sub: 'Attendance history & export', color: '#0891b2', bg: 'rgba(8,145,178,0.1)', border: 'rgba(8,145,178,0.3)', screen: 'Reports'    },
-    { icon: '📈', label: 'Dashboard',          sub: 'Charts & live statistics',   color: '#db2777', bg: 'rgba(219,39,119,0.1)', border: 'rgba(219,39,119,0.3)', screen: 'Dashboard'  },
+    { icon: '👤', label: 'Register\nWorker',   sub: 'Enroll new field staff',       color: '#2563eb', bg: 'rgba(37,99,235,0.1)',   border: 'rgba(37,99,235,0.3)',   screen: 'Enroll'     },
+    { icon: '🎯', label: 'Mark\nAttendance',   sub: 'Face scan authentication',      color: '#059669', bg: 'rgba(5,150,105,0.1)',   border: 'rgba(5,150,105,0.3)',   screen: 'Attendance' },
+    { icon: '👥', label: 'View\nWorkforce',    sub: 'Manage registered staff',       color: '#7c3aed', bg: 'rgba(124,58,237,0.1)',  border: 'rgba(124,58,237,0.3)',  screen: 'WorkerList' },
+    { icon: '⚡', label: 'Admin\nConsole',     sub: 'Benchmarks & system logs',      color: '#d97706', bg: 'rgba(217,119,6,0.1)',   border: 'rgba(217,119,6,0.3)',   screen: 'Admin'      },
+    { icon: '📊', label: 'View\nReports',      sub: 'Attendance history & export',   color: '#0891b2', bg: 'rgba(8,145,178,0.1)',   border: 'rgba(8,145,178,0.3)',   screen: 'Reports'    },
+    { icon: '📈', label: 'Dashboard',          sub: 'Charts & live statistics',      color: '#db2777', bg: 'rgba(219,39,119,0.1)',  border: 'rgba(219,39,119,0.3)',  screen: 'Dashboard'  },
   ];
 
-  const now = new Date();
+  const now     = new Date();
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -70,16 +94,18 @@ export default function HomeScreen({ navigation }: any) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#3b82f6" />}
       showsVerticalScrollIndicator={false}
     >
-      {/* Background orbs */}
       <View style={styles.orb1} />
       <View style={styles.orb2} />
 
       {/* Header Card */}
-      <Animated.View entering={FadeInDown.delay(0).duration(500)} style={styles.headerCard}>
+      <Animated.View style={[styles.headerCard, slideStyle(headerAnim)]}>
         <View style={styles.headerLeft}>
           <Text style={styles.timeText}>{timeStr}</Text>
           <Text style={styles.dateText}>{dateStr}</Text>
-          <View style={[styles.statusPill, { backgroundColor: online ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', borderColor: online ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)' }]}>
+          <View style={[styles.statusPill, {
+            backgroundColor: online ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+            borderColor:     online ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
+          }]}>
             <View style={[styles.statusDot, { backgroundColor: online ? '#10b981' : '#ef4444' }]} />
             <Text style={[styles.statusText, { color: online ? '#10b981' : '#ef4444' }]}>
               {online ? 'Online' : 'Offline Mode'}
@@ -94,11 +120,11 @@ export default function HomeScreen({ navigation }: any) {
       </Animated.View>
 
       {/* Stats Row */}
-      <Animated.View entering={FadeInDown.delay(150).duration(500)} style={styles.statsRow}>
+      <Animated.View style={[styles.statsRow, slideStyle(statsAnim)]}>
         {[
-          { label: 'Workers',   value: stats.workers, icon: '👥', color: '#3b82f6' },
-          { label: 'Today',     value: stats.today,   icon: '✅', color: '#10b981' },
-          { label: 'Pending',   value: stats.pending, icon: '⏳', color: stats.pending > 0 ? '#f59e0b' : '#475569' },
+          { label: 'Workers', value: stats.workers, icon: '👥', color: '#3b82f6' },
+          { label: 'Today',   value: stats.today,   icon: '✅', color: '#10b981' },
+          { label: 'Pending', value: stats.pending, icon: '⏳', color: stats.pending > 0 ? '#f59e0b' : '#475569' },
         ].map(stat => (
           <View key={stat.label} style={styles.statCard}>
             <Text style={styles.statIcon}>{stat.icon}</Text>
@@ -109,7 +135,7 @@ export default function HomeScreen({ navigation }: any) {
       </Animated.View>
 
       {/* Section title */}
-      <Animated.View entering={FadeInDown.delay(280).duration(400)} style={styles.sectionHeader}>
+      <Animated.View style={[styles.sectionHeader, slideStyle(sectionAnim)]}>
         <View style={styles.sectionLine} />
         <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
         <View style={styles.sectionLine} />
@@ -120,8 +146,7 @@ export default function HomeScreen({ navigation }: any) {
         {actions.map((action, index) => (
           <Animated.View
             key={action.screen}
-            entering={FadeInDown.delay(340 + index * 70).duration(400)}
-            style={{ width: (width - 52) / 2 }}
+            style={[{ width: (width - 52) / 2 }, slideStyle(cardAnims[index])]}
           >
             <TouchableOpacity
               style={[styles.actionCard, { backgroundColor: action.bg, borderColor: action.border }]}
@@ -182,7 +207,6 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </TouchableOpacity>
 
-      {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>All data encrypted on-device  ·  Zero network dependency</Text>
       </View>
@@ -191,41 +215,41 @@ export default function HomeScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container    : { flex: 1, backgroundColor: '#020817' },
-  content      : { padding: 20, paddingBottom: 40 },
-  orb1         : { position: 'absolute', top: 0, right: -60, width: 250, height: 250, borderRadius: 125, backgroundColor: '#1e40af', opacity: 0.08 },
-  orb2         : { position: 'absolute', top: 300, left: -80, width: 200, height: 200, borderRadius: 100, backgroundColor: '#6d28d9', opacity: 0.06 },
-  headerCard   : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#1e293b', marginBottom: 16 },
-  headerLeft   : { gap: 6 },
-  timeText     : { fontSize: 32, fontWeight: '800', color: '#f8fafc', letterSpacing: -1 },
-  dateText     : { fontSize: 13, color: '#64748b' },
-  statusPill   : { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start', marginTop: 4 },
-  statusDot    : { width: 7, height: 7, borderRadius: 3.5 },
-  statusText   : { fontSize: 12, fontWeight: '600' },
-  headerRight  : {},
-  logoCircle   : { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 1.5, borderColor: 'rgba(59,130,246,0.2)', alignItems: 'center', justifyContent: 'center' },
-  logoIcon     : { fontSize: 24 },
-  statsRow     : { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  statCard     : { flex: 1, backgroundColor: '#0f172a', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b', gap: 4 },
-  statIcon     : { fontSize: 20 },
-  statValue    : { fontSize: 26, fontWeight: '800' },
-  statLabel    : { fontSize: 11, color: '#475569', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  sectionLine  : { flex: 1, height: 1, backgroundColor: '#1e293b' },
-  sectionTitle : { fontSize: 11, color: '#475569', fontWeight: '700', letterSpacing: 2 },
-  grid         : { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  actionCard   : { borderRadius: 20, padding: 18, borderWidth: 1, gap: 8, position: 'relative', overflow: 'hidden' },
-  actionIconBg : { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  actionIcon   : { fontSize: 20 },
-  actionLabel  : { fontSize: 15, fontWeight: '700', lineHeight: 20 },
-  actionSub    : { fontSize: 11, color: '#475569', lineHeight: 16 },
-  actionArrow  : { position: 'absolute', bottom: 14, right: 14, width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  arrowText    : { color: '#fff', fontSize: 14, fontWeight: '700' },
-  syncBtn      : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(14,165,233,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(14,165,233,0.3)', marginBottom: 12 },
-  syncBtnLoading: { opacity: 0.7 },
-  syncIcon     : { fontSize: 28 },
-  syncTitle    : { color: '#38bdf8', fontSize: 15, fontWeight: '700' },
-  syncSub      : { color: '#475569', fontSize: 12, marginTop: 2 },
+  container        : { flex: 1, backgroundColor: '#020817' },
+  content          : { padding: 20, paddingBottom: 40 },
+  orb1             : { position: 'absolute', top: 0, right: -60, width: 250, height: 250, borderRadius: 125, backgroundColor: '#1e40af', opacity: 0.08 },
+  orb2             : { position: 'absolute', top: 300, left: -80, width: 200, height: 200, borderRadius: 100, backgroundColor: '#6d28d9', opacity: 0.06 },
+  headerCard       : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#1e293b', marginBottom: 16 },
+  headerLeft       : { gap: 6 },
+  timeText         : { fontSize: 32, fontWeight: '800', color: '#f8fafc', letterSpacing: -1 },
+  dateText         : { fontSize: 13, color: '#64748b' },
+  statusPill       : { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, borderWidth: 1, alignSelf: 'flex-start', marginTop: 4 },
+  statusDot        : { width: 7, height: 7, borderRadius: 3.5 },
+  statusText       : { fontSize: 12, fontWeight: '600' },
+  headerRight      : {},
+  logoCircle       : { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 1.5, borderColor: 'rgba(59,130,246,0.2)', alignItems: 'center', justifyContent: 'center' },
+  logoIcon         : { fontSize: 24 },
+  statsRow         : { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  statCard         : { flex: 1, backgroundColor: '#0f172a', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b', gap: 4 },
+  statIcon         : { fontSize: 20 },
+  statValue        : { fontSize: 26, fontWeight: '800' },
+  statLabel        : { fontSize: 11, color: '#475569', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeader    : { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  sectionLine      : { flex: 1, height: 1, backgroundColor: '#1e293b' },
+  sectionTitle     : { fontSize: 11, color: '#475569', fontWeight: '700', letterSpacing: 2 },
+  grid             : { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
+  actionCard       : { borderRadius: 20, padding: 18, borderWidth: 1, gap: 8, position: 'relative', overflow: 'hidden' },
+  actionIconBg     : { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  actionIcon       : { fontSize: 20 },
+  actionLabel      : { fontSize: 15, fontWeight: '700', lineHeight: 20 },
+  actionSub        : { fontSize: 11, color: '#475569', lineHeight: 16 },
+  actionArrow      : { position: 'absolute', bottom: 14, right: 14, width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  arrowText        : { color: '#fff', fontSize: 14, fontWeight: '700' },
+  syncBtn          : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(14,165,233,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(14,165,233,0.3)', marginBottom: 12 },
+  syncBtnLoading   : { opacity: 0.7 },
+  syncIcon         : { fontSize: 28 },
+  syncTitle        : { color: '#38bdf8', fontSize: 15, fontWeight: '700' },
+  syncSub          : { color: '#475569', fontSize: 12, marginTop: 2 },
   offlineCard      : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(71,85,105,0.15)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#1e293b', marginBottom: 12 },
   offlineIcon      : { fontSize: 28 },
   offlineTitle     : { color: '#94a3b8', fontSize: 15, fontWeight: '700' },
@@ -234,10 +258,10 @@ const styles = StyleSheet.create({
   unconfiguredIcon : { fontSize: 28 },
   unconfiguredTitle: { color: '#f87171', fontSize: 15, fontWeight: '700' },
   unconfiguredSub  : { color: '#475569', fontSize: 12, marginTop: 2 },
-  testModelBtn  : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(124,58,237,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)', marginBottom: 12 },
-  testModelIcon : { fontSize: 28 },
-  testModelTitle: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
-  testModelSub  : { color: '#475569', fontSize: 12, marginTop: 2 },
-  footer       : { alignItems: 'center', marginTop: 8 },
-  footerText   : { color: '#1e293b', fontSize: 11, letterSpacing: 0.5 },
+  testModelBtn     : { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(124,58,237,0.1)', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)', marginBottom: 12 },
+  testModelIcon    : { fontSize: 28 },
+  testModelTitle   : { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
+  testModelSub     : { color: '#475569', fontSize: 12, marginTop: 2 },
+  footer           : { alignItems: 'center', marginTop: 8 },
+  footerText       : { color: '#1e293b', fontSize: 11, letterSpacing: 0.5 },
 });

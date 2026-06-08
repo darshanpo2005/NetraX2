@@ -1,9 +1,25 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  Alert, Image, TextInput,
+  Alert, Image, TextInput, Animated,
 } from 'react-native';
-import Animated, { SlideInLeft } from 'react-native-reanimated';
+
+function SlideCard({ index, children }: { index: number; children: React.ReactNode }) {
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(-24)).current;
+  useEffect(() => {
+    const delay = Math.min(index, 7) * 60;
+    Animated.parallel([
+      Animated.timing(opacity,    { toValue: 1, duration: 350, delay, useNativeDriver: true }),
+      Animated.timing(translateX, { toValue: 0, duration: 350, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+      {children}
+    </Animated.View>
+  );
+}
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllWorkers, getTodayPresentWorkerIds, deleteWorker, Worker } from '../services/DatabaseService';
 
@@ -140,7 +156,7 @@ export default function WorkerListScreen({ navigation }: any) {
             const color = getColor(item.name);
             const isPresent = todayPresentIds.has(item.id);
             return (
-              <Animated.View entering={SlideInLeft.delay(Math.min(index, 7) * 55).springify()}>
+              <SlideCard index={index}>
               <TouchableOpacity
                 style={styles.card}
                 onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
@@ -182,7 +198,7 @@ export default function WorkerListScreen({ navigation }: any) {
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
-              </Animated.View>
+              </SlideCard>
             );
           }}
         />
