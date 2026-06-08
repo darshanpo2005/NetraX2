@@ -9,7 +9,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { addWorker, workerExists, getAllWorkerEmbeddings } from '../services/DatabaseService';
 import { l2Normalize, cosineSimilarity } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
-import { notifyWorkerRegistered } from '../services/NotificationService';
 
 const REQUIRED_CAPTURES = 5;
 
@@ -156,7 +155,6 @@ export default function EnrollScreen({ navigation }: any) {
           createdAt : Date.now(),
           photoUri  : firstPhotoUriRef.current,
         });
-        notifyWorkerRegistered(name.trim());
         embeddingsRef.current = [];
         firstPhotoUriRef.current = null;
         setStep('done');

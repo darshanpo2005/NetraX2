@@ -9,7 +9,6 @@ import * as Haptics from 'expo-haptics';
 import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
-import { notifyAttendanceMarked } from '../services/NotificationService';
 
 const CHALLENGE     = { text: 'Blink your eyes', emoji: '😉', instruction: 'Blink slowly once' };
 const LIVENESS_SECS = 12;
@@ -133,7 +132,6 @@ export default function AttendanceScreen({ navigation }: any) {
         });
         const matchedWorker = workers.find(w => w.id === match.workerId);
         const timeStr = new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-        notifyAttendanceMarked(match.workerName!, timeStr);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setResult({
           type: 'success', name: match.workerName!, sim: match.similarity,
