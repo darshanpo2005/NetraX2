@@ -1,22 +1,41 @@
 import * as Notifications from 'expo-notifications';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const notificationsAvailable = () => {
+  try {
+    require('expo-notifications');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  // notifications not available in dev build
+}
 
 export const requestNotificationPermission = async (): Promise<void> => {
-  const { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    await Notifications.requestPermissionsAsync();
+  if (!notificationsAvailable()) return;
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      await Notifications.requestPermissionsAsync();
+    }
+  } catch {
+    // notifications not available in dev build
   }
 };
 
 export const notifyAttendanceMarked = async (workerName: string, time: string): Promise<void> => {
+  if (!notificationsAvailable()) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -26,11 +45,12 @@ export const notifyAttendanceMarked = async (workerName: string, time: string): 
       trigger: null,
     });
   } catch {
-    // Notifications are non-critical — swallow errors silently
+    // notifications not available in dev build
   }
 };
 
 export const notifyWorkerRegistered = async (workerName: string): Promise<void> => {
+  if (!notificationsAvailable()) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -40,6 +60,6 @@ export const notifyWorkerRegistered = async (workerName: string): Promise<void> 
       trigger: null,
     });
   } catch {
-    // Notifications are non-critical — swallow errors silently
+    // notifications not available in dev build
   }
 };
