@@ -1,42 +1,6 @@
-import * as Notifications from 'expo-notifications';
-
-const notificationsAvailable = () => {
-  try {
-    require('expo-notifications');
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-} catch {
-  // notifications not available in dev build
-}
-
-export const requestNotificationPermission = async (): Promise<void> => {
-  if (!notificationsAvailable()) return;
-  try {
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') {
-      await Notifications.requestPermissionsAsync();
-    }
-  } catch {
-    // notifications not available in dev build
-  }
-};
-
 export const notifyAttendanceMarked = async (workerName: string, time: string): Promise<void> => {
-  if (!notificationsAvailable()) return;
   try {
+    const Notifications = require('expo-notifications');
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Attendance Marked ✅',
@@ -45,13 +9,13 @@ export const notifyAttendanceMarked = async (workerName: string, time: string): 
       trigger: null,
     });
   } catch {
-    // notifications not available in dev build
+    // not available in dev build
   }
 };
 
 export const notifyWorkerRegistered = async (workerName: string): Promise<void> => {
-  if (!notificationsAvailable()) return;
   try {
+    const Notifications = require('expo-notifications');
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Worker Registered ✅',
@@ -60,6 +24,6 @@ export const notifyWorkerRegistered = async (workerName: string): Promise<void> 
       trigger: null,
     });
   } catch {
-    // notifications not available in dev build
+    // not available in dev build
   }
 };

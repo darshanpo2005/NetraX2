@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { initDatabase } from '../services/DatabaseService';
-import { requestNotificationPermission } from '../services/NotificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,7 +51,6 @@ export default function SplashScreen({ navigation }: any) {
     // Init and navigate
     const init = async () => {
       await initDatabase();
-      requestNotificationPermission(); // non-blocking — request in background
       await new Promise(r => setTimeout(r, 2800));
       navigation.replace('Login');
     };
