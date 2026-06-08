@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, Image, TextInput, Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 function SlideCard({ index, children }: { index: number; children: React.ReactNode }) {
   const opacity    = useRef(new Animated.Value(0)).current;
@@ -162,7 +163,11 @@ export default function WorkerListScreen({ navigation }: any) {
                 onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
                 activeOpacity={0.75}
               >
-                <View style={[styles.cardAccent, { backgroundColor: color }]} />
+                <LinearGradient
+                  colors={[color, `${color}18`]}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+                  style={styles.cardAccent}
+                />
 
                 {item.photoUri ? (
                   <Image source={{ uri: item.photoUri }} style={styles.photoAvatar} />
@@ -178,9 +183,13 @@ export default function WorkerListScreen({ navigation }: any) {
                     <View style={styles.idBadge}>
                       <Text style={styles.idText}>{item.employeeId}</Text>
                     </View>
-                    {isPresent && (
+                    {isPresent ? (
                       <View style={styles.presentBadge}>
                         <Text style={styles.presentText}>● Present</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.absentBadge}>
+                        <Text style={styles.absentText}>○ Absent</Text>
                       </View>
                     )}
                   </View>
@@ -247,6 +256,8 @@ const styles = StyleSheet.create({
   idText            : { fontSize: 11, color: '#64748b', fontWeight: '600', letterSpacing: 0.5 },
   presentBadge      : { backgroundColor: 'rgba(16,185,129,0.12)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: 'rgba(16,185,129,0.3)' },
   presentText       : { fontSize: 10, color: '#10b981', fontWeight: '700' },
+  absentBadge       : { backgroundColor: 'rgba(100,116,139,0.1)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: 'rgba(100,116,139,0.25)' },
+  absentText        : { fontSize: 10, color: '#64748b', fontWeight: '600' },
   enrollDate        : { fontSize: 11, color: '#334155' },
   cardActions       : { alignItems: 'flex-end', gap: 10 },
   indexBadge        : { backgroundColor: '#1e293b', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },

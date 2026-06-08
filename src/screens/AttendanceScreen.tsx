@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity,
   StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import FaceDetector from '@react-native-ml-kit/face-detection';
 import * as Haptics from 'expo-haptics';
@@ -435,86 +436,98 @@ export default function AttendanceScreen({ navigation }: any) {
 
   // ─── Result step ──────────────────────────────────────────────────────────
   if (step === 'result' && result) {
-    const resultConfig = {
-      success      : { icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.2)'  },
-      no_face      : { icon: '🚫', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'   },
-      no_match     : { icon: '❓', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)'  },
-      error        : { icon: '⚠️', color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)' },
-      liveness_fail: { icon: '🔒', color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.2)'   },
-    };
-    const cfg = resultConfig[result.type];
+    const isSuccess = result.type === 'success';
+    const isWarn    = result.type === 'no_match';
+    const gradColors: readonly [string, string, string] =
+      isSuccess ? ['#052e16', '#064e3b', '#065f46'] :
+      isWarn    ? ['#2d1000', '#451a00', '#713f12'] :
+                  ['#2d0a0a', '#450a0a', '#7f1d1d'];
+    const accentColor = isSuccess ? '#4ade80' : isWarn ? '#fbbf24' : '#f87171';
 
     return (
       <View style={styles.resultContainer}>
         <View style={styles.orb1} /><View style={styles.orb2} />
 
-        <Animated.View style={[styles.resultCard, { backgroundColor: cfg.bg, borderColor: cfg.border }, {
+        <Animated.View style={[{ width: '100%' }, {
           opacity: resultFadeAnim,
-          transform: [
-            { scale: resultScaleAnim },
-            { translateX: resultShakeAnim },
-          ],
+          transform: [{ scale: resultScaleAnim }, { translateX: resultShakeAnim }],
         }]}>
-          <Text style={styles.resultIcon}>{cfg.icon}</Text>
-          <Text style={[styles.resultTitle, { color: cfg.color }]}>{result.message}</Text>
-
-          {result.type === 'success' && (
-            <>
-              {result.photoUri ? (
-                <Image source={{ uri: result.photoUri }} style={styles.successPhoto} />
-              ) : null}
-              <Text style={styles.workerName}>{result.name}</Text>
-              <View style={styles.simContainer}>
-                <Text style={styles.simLabel}>Match Confidence</Text>
-                <View style={styles.simBar}>
-                  <View style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any, backgroundColor: cfg.color }]} />
-                </View>
-                <Text style={[styles.simValue, { color: cfg.color }]}>{((result.sim || 0) * 100).toFixed(1)}%</Text>
-              </View>
-              <View style={styles.successMeta}>
-                <Text style={styles.successMetaText}>✅ Attendance logged offline</Text>
-                <Text style={styles.successMetaText}>📅 {new Date().toLocaleString('en-IN')}</Text>
-              </View>
-            </>
-          )}
-
-          {(result.type === 'no_face' || result.type === 'no_match' || result.type === 'liveness_fail') && (
-            <View style={styles.errorDetail}>
-              <Text style={styles.errorDetailText}>{result.detail}</Text>
-              <View style={styles.tipsBox}>
-                <Text style={styles.tipsTitle}>
-                  {result.type === 'no_face'       ? 'Tips for better detection:' :
-                   result.type === 'liveness_fail' ? 'Tips for liveness check:'   :
-                                                     'Possible reasons:'}
-                </Text>
-                {result.type === 'no_face' ? (
-                  <>
-                    <Text style={styles.tipItem}>• Ensure face is well lit, no shadows</Text>
-                    <Text style={styles.tipItem}>• Remove glasses or mask if wearing</Text>
-                    <Text style={styles.tipItem}>• Hold phone at eye level</Text>
-                  </>
-                ) : result.type === 'liveness_fail' ? (
-                  <>
-                    <Text style={styles.tipItem}>• Make sure your face is well-lit</Text>
-                    <Text style={styles.tipItem}>• Position your face fully in the oval</Text>
-                    <Text style={styles.tipItem}>• Blink slowly — close eyes fully, then open</Text>
-                    <Text style={styles.tipItem}>• Wait for "Face detected ✓" before blinking</Text>
-                  </>
+          <LinearGradient colors={gradColors} style={styles.resultCard}>
+            {isSuccess ? (
+              <>
+                <Text style={styles.confetti}>🎉  🎊  🎉</Text>
+                {result.photoUri ? (
+                  <Image source={{ uri: result.photoUri }} style={styles.successPhoto} />
                 ) : (
-                  <>
-                    <Text style={styles.tipItem}>• Worker not yet registered</Text>
-                    <Text style={styles.tipItem}>• Poor lighting conditions</Text>
-                    <Text style={styles.tipItem}>• Face angle too extreme</Text>
-                  </>
+                  <View style={styles.successAvatarPlaceholder}>
+                    <Text style={{ fontSize: 52 }}>👤</Text>
+                  </View>
                 )}
-              </View>
-            </View>
-          )}
+                <Text style={styles.workerName}>{result.name}</Text>
+                <Text style={[styles.resultTitle, { color: accentColor }]}>{result.message}</Text>
+                <View style={styles.simContainer}>
+                  <Text style={styles.simLabel}>Match Confidence</Text>
+                  <View style={styles.simBar}>
+                    <LinearGradient
+                      colors={['#4ade80', '#22c55e']}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                      style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any }]}
+                    />
+                  </View>
+                  <Text style={[styles.simValue, { color: accentColor }]}>{((result.sim || 0) * 100).toFixed(1)}%</Text>
+                </View>
+                <View style={styles.successPill}>
+                  <Text style={styles.successPillText}>✓ Attendance Recorded  ·  {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.resultIcon}>
+                  {result.type === 'no_face' ? '🚫' : result.type === 'no_match' ? '❓' : '🔒'}
+                </Text>
+                <Text style={[styles.resultTitle, { color: accentColor }]}>{result.message}</Text>
+                {result.detail ? <Text style={styles.errorDetailText}>{result.detail}</Text> : null}
+                <View style={styles.tipsBox}>
+                  <Text style={styles.tipsTitle}>
+                    {result.type === 'no_face' ? 'Tips for better detection:' :
+                     result.type === 'liveness_fail' ? 'Tips for liveness check:' : 'Possible reasons:'}
+                  </Text>
+                  {result.type === 'no_face' ? (
+                    <>
+                      <Text style={styles.tipItem}>• Ensure face is well lit, no shadows</Text>
+                      <Text style={styles.tipItem}>• Remove glasses or mask if wearing</Text>
+                      <Text style={styles.tipItem}>• Hold phone at eye level</Text>
+                    </>
+                  ) : result.type === 'liveness_fail' ? (
+                    <>
+                      <Text style={styles.tipItem}>• Make sure your face is well-lit</Text>
+                      <Text style={styles.tipItem}>• Position your face fully in the oval</Text>
+                      <Text style={styles.tipItem}>• Blink slowly — close eyes fully, then open</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.tipItem}>• Worker not yet registered</Text>
+                      <Text style={styles.tipItem}>• Poor lighting conditions</Text>
+                      <Text style={styles.tipItem}>• Face angle too extreme</Text>
+                    </>
+                  )}
+                </View>
+                {/* Retry inside fail card */}
+                <TouchableOpacity onPress={handleRetry} activeOpacity={0.8} style={{ width: '100%', marginTop: 4 }}>
+                  <LinearGradient colors={['#2563eb', '#4f46e5']} style={styles.retryBtnInner}>
+                    <Text style={styles.retryBtnText}>↺  Try Again</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            )}
+          </LinearGradient>
         </Animated.View>
 
-        <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
-          <Text style={styles.retryBtnText}>Try Again</Text>
-        </TouchableOpacity>
+        {isSuccess && (
+          <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
+            <Text style={styles.retryBtnText}>↺  Scan Another</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.homeBtn} onPress={() => navigation.navigate('Home')} activeOpacity={0.8}>
           <Text style={styles.homeBtnText}>Back to Home</Text>
         </TouchableOpacity>
@@ -567,25 +580,27 @@ const styles = StyleSheet.create({
   resultContainer  : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
   orb1             : { position: 'absolute', top: -40, left: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.1 },
   orb2             : { position: 'absolute', bottom: -40, right: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.08 },
-  resultCard       : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, alignItems: 'center', gap: 12 },
-  resultIcon       : { fontSize: 64, marginBottom: 4 },
-  resultTitle      : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  successPhoto     : { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#10b981' },
-  workerName       : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
-  simContainer     : { width: '100%', gap: 6 },
-  simLabel         : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
-  simBar           : { height: 8, backgroundColor: '#1e293b', borderRadius: 4, overflow: 'hidden' },
-  simFill          : { height: '100%', borderRadius: 4 },
-  simValue         : { fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  successMeta      : { width: '100%', gap: 4, marginTop: 4 },
-  successMetaText  : { color: '#475569', fontSize: 12, textAlign: 'center' },
-  errorDetail      : { width: '100%', gap: 12 },
-  errorDetailText  : { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  tipsBox          : { backgroundColor: 'rgba(15,23,42,0.8)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: '#1e293b' },
-  tipsTitle        : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
-  tipItem          : { color: '#475569', fontSize: 12, lineHeight: 18 },
-  retryBtn         : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
-  retryBtnText     : { color: '#fff', fontWeight: '700', fontSize: 16 },
+  resultCard            : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', gap: 12 },
+  confetti              : { fontSize: 28, letterSpacing: 8, marginBottom: -4 },
+  resultIcon            : { fontSize: 64, marginBottom: 4 },
+  resultTitle           : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  successPhoto          : { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: '#4ade80' },
+  successAvatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center', justifyContent: 'center' },
+  workerName            : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
+  simContainer          : { width: '100%', gap: 6 },
+  simLabel              : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
+  simBar                : { height: 8, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden' },
+  simFill               : { height: '100%', borderRadius: 4 },
+  simValue              : { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  successPill           : { backgroundColor: 'rgba(74,222,128,0.12)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(74,222,128,0.3)' },
+  successPillText       : { color: '#4ade80', fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
+  errorDetailText       : { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  tipsBox               : { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  tipsTitle             : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
+  tipItem               : { color: '#475569', fontSize: 12, lineHeight: 18 },
+  retryBtnInner         : { borderRadius: 14, padding: 14, alignItems: 'center' },
+  retryBtn              : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
+  retryBtnText          : { color: '#fff', fontWeight: '700', fontSize: 16 },
   homeBtn          : { width: '100%', backgroundColor: '#0f172a', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b' },
   homeBtnText      : { color: '#94a3b8', fontWeight: '600', fontSize: 15 },
 });
