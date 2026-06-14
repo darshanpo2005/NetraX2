@@ -24,7 +24,7 @@
 
 ## 📱 Demo
 
-> 📹 **[Watch Demo Video →](YOUR_VIDEO_LINK_HERE)**
+> 📹 **[Watch Demo Video →](https://www.youtube.com/shorts/vE53gM-Lw00)**
 
 | Enrollment | Liveness Detection | Attendance | Analytics |
 |:---:|:---:|:---:|:---:|
