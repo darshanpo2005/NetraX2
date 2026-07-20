@@ -1,5 +1,6 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import SplashScreen from './src/screens/SplashScreen';
@@ -18,28 +19,30 @@ const Stack = createStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <Stack.Navigator
-        initialRouteName="Splash"
-        screenOptions={{
-          headerStyle: { backgroundColor: COLORS.background, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-          headerTintColor: COLORS.primary,
-          headerTitleStyle: { fontWeight: '700', fontSize: 17, letterSpacing: 0.5, color: COLORS.textPrimary },
-          cardStyle: { backgroundColor: COLORS.background },
-        }}
-      >
-        <Stack.Screen name="Splash"      component={SplashScreen}     options={{ headerShown: false }} />
-        <Stack.Screen name="Login"       component={LoginScreen}      options={{ headerShown: false }} />
-        <Stack.Screen name="Home"        component={HomeScreen}       options={{ headerShown: false }} />
-        <Stack.Screen name="Enroll"      component={EnrollScreen}     options={{ title: 'Register Worker' }} />
-        <Stack.Screen name="Attendance"  component={AttendanceScreen} options={{ title: 'Face Authentication' }} />
-        <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
-        <Stack.Screen name="WorkerDetail" component={WorkerDetailScreen} options={{ title: 'Worker Profile' }} />
-        <Stack.Screen name="Admin"       component={AdminScreen}           options={{ title: 'Admin Console' }} />
-        <Stack.Screen name="Reports"     component={AttendanceReportScreen} options={{ title: 'Attendance Reports' }} />
-        <Stack.Screen name="Dashboard"   component={DashboardScreen}        options={{ title: 'Dashboard' }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+        <Stack.Navigator
+          initialRouteName="Splash"
+          screenOptions={{
+            headerStyle: { backgroundColor: COLORS.background, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+            headerTintColor: COLORS.primary,
+            headerTitleStyle: { fontWeight: '700', fontSize: 17, letterSpacing: 0.5, color: COLORS.textPrimary },
+            cardStyle: { backgroundColor: COLORS.background },
+          }}
+        >
+          <Stack.Screen name="Splash"      component={SplashScreen}     options={{ headerShown: false }} />
+          <Stack.Screen name="Login"       component={LoginScreen}      options={{ headerShown: false }} />
+          <Stack.Screen name="Home"        component={HomeScreen}       options={{ headerShown: false }} />
+          <Stack.Screen name="Enroll"      component={EnrollScreen}     options={{ title: 'Register Worker' }} />
+          <Stack.Screen name="Attendance"  component={AttendanceScreen} options={{ title: 'Face Authentication' }} />
+          <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
+          <Stack.Screen name="WorkerDetail" component={WorkerDetailScreen} options={{ title: 'Worker Profile' }} />
+          <Stack.Screen name="Admin"       component={AdminScreen}           options={{ title: 'Admin Console' }} />
+          <Stack.Screen name="Reports"     component={AttendanceReportScreen} options={{ title: 'Attendance Reports' }} />
+          <Stack.Screen name="Dashboard"   component={DashboardScreen}        options={{ title: 'Dashboard' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

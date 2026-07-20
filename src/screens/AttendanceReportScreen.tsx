@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Dimensions, Modal, StatusBar,
+  ActivityIndicator, Alert, Dimensions, Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import BarChart from '../components/BarChart';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -21,7 +22,6 @@ import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
 const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
-const TOP_INSET = StatusBar.currentHeight || 44;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,7 +241,7 @@ export default function AttendanceReportScreen() {
   ];
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -401,7 +401,7 @@ export default function AttendanceReportScreen() {
         <ExportBtn label="PDF"   color={COLORS.error}   busy={busy === 'pdf'} onPress={handlePDF} anyBusy={!!busy} />
         <ExportBtn label="Excel" color={COLORS.warning} busy={busy === 'xls'} onPress={handleXLS} anyBusy={!!busy} />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -430,7 +430,7 @@ function ExportBtn({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root      : { flex: 1, backgroundColor: COLORS.background, paddingTop: TOP_INSET },
+  root      : { flex: 1, backgroundColor: COLORS.background },
   container : { flex: 1 },
   content   : { padding: SPACING.screen },
 

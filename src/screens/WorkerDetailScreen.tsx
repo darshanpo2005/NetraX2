@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Worker, AttendanceLog, deleteWorker,
   getWorkerAttendanceHistory, getWorkerStats, WorkerStats,
@@ -76,86 +77,89 @@ export default function WorkerDetailScreen({ route, navigation }: any) {
     : 'Never';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {/* Profile header */}
-      <View style={styles.profileSection}>
-        {worker.photoUri ? (
-          <Image source={{ uri: worker.photoUri }} style={[styles.photo, { borderColor: accent }]} />
-        ) : (
-          <View style={[styles.avatarLarge, { backgroundColor: `${accent}18`, borderColor: `${accent}60` }]}>
-            <Text style={[styles.avatarInitial, { color: accent }]}>{worker.name[0].toUpperCase()}</Text>
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Profile header */}
+        <View style={styles.profileSection}>
+          {worker.photoUri ? (
+            <Image source={{ uri: worker.photoUri }} style={[styles.photo, { borderColor: accent }]} />
+          ) : (
+            <View style={[styles.avatarLarge, { backgroundColor: `${accent}18`, borderColor: `${accent}60` }]}>
+              <Text style={[styles.avatarInitial, { color: accent }]}>{worker.name[0].toUpperCase()}</Text>
+            </View>
+          )}
+          <Text style={styles.workerName}>{worker.name}</Text>
+          <View style={styles.idBadge}>
+            <Text style={styles.idText}>{worker.employeeId}</Text>
           </View>
-        )}
-        <Text style={styles.workerName}>{worker.name}</Text>
-        <View style={styles.idBadge}>
-          <Text style={styles.idText}>{worker.employeeId}</Text>
+          <Text style={styles.enrollText}>
+            Enrolled {new Date(worker.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </Text>
         </View>
-        <Text style={styles.enrollText}>
-          Enrolled {new Date(worker.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-        </Text>
-      </View>
 
-      {/* Stats grid */}
-      <View style={styles.statsGrid}>
-        <StatBox label="Total"      value={stats?.total     ?? '—'}          color={COLORS.primary} />
-        <StatBox label="This Week"  value={stats?.thisWeek  ?? '—'}          color={COLORS.success} />
-        <StatBox label="This Month" value={stats?.thisMonth ?? '—'}          color="#8B5CF6" />
-        <StatBox label="Streak"     value={stats ? `${stats.streak}d` : '—'} color={COLORS.warning} />
-      </View>
+        {/* Stats grid */}
+        <View style={styles.statsGrid}>
+          <StatBox label="Total"      value={stats?.total     ?? '—'}          color={COLORS.primary} />
+          <StatBox label="This Week"  value={stats?.thisWeek  ?? '—'}          color={COLORS.success} />
+          <StatBox label="This Month" value={stats?.thisMonth ?? '—'}          color="#8B5CF6" />
+          <StatBox label="Streak"     value={stats ? `${stats.streak}d` : '—'} color={COLORS.warning} />
+        </View>
 
-      {/* Last seen */}
-      <Card style={styles.lastSeenCard}>
-        <Text style={styles.lastSeenLabel}>LAST ATTENDANCE</Text>
-        <Text style={styles.lastSeenValue}>{lastSeenStr}</Text>
-      </Card>
+        {/* Last seen */}
+        <Card style={styles.lastSeenCard}>
+          <Text style={styles.lastSeenLabel}>LAST ATTENDANCE</Text>
+          <Text style={styles.lastSeenValue}>{lastSeenStr}</Text>
+        </Card>
 
-      {/* Attendance history */}
-      <View style={styles.historySection}>
-        <SectionLabel title="ATTENDANCE HISTORY" />
+        {/* Attendance history */}
+        <View style={styles.historySection}>
+          <SectionLabel title="ATTENDANCE HISTORY" />
 
-        {history.length === 0 ? (
-          <Card style={styles.noHistory}>
-            <Text style={styles.noHistoryIcon}>📋</Text>
-            <Text style={styles.noHistoryText}>No attendance records yet</Text>
-          </Card>
-        ) : (
-          groups.map(group => (
-            <Card key={group.title} noPadding style={styles.monthGroup}>
-              <View style={styles.monthHeader}>
-                <Text style={styles.monthTitle}>{group.title}</Text>
-                <Text style={styles.monthCount}>{group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}</Text>
-              </View>
-              {group.entries.map((entry, i) => {
-                const d    = new Date(entry.timestamp);
-                const date = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-                const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-                const day  = d.toLocaleDateString('en-IN', { weekday: 'short' });
-                const isLast = i === group.entries.length - 1;
-                return (
-                  <View key={entry.id} style={[styles.entryRow, isLast && styles.entryRowLast]}>
-                    <View style={styles.entryDot} />
-                    <View style={styles.entryInfo}>
-                      <Text style={styles.entryDate}>{day}, {date}</Text>
-                      <Text style={styles.entryTime}>{time}</Text>
-                    </View>
-                    <View style={styles.entryRight}>
-                      <Text style={styles.confidenceVal}>{Math.round(entry.similarity * 100)}%</Text>
-                      <Text style={styles.confidenceLbl}>match</Text>
-                    </View>
-                  </View>
-                );
-              })}
+          {history.length === 0 ? (
+            <Card style={styles.noHistory}>
+              <Text style={styles.noHistoryIcon}>📋</Text>
+              <Text style={styles.noHistoryText}>No attendance records yet</Text>
             </Card>
-          ))
-        )}
-      </View>
+          ) : (
+            groups.map(group => (
+              <Card key={group.title} noPadding style={styles.monthGroup}>
+                <View style={styles.monthHeader}>
+                  <Text style={styles.monthTitle}>{group.title}</Text>
+                  <Text style={styles.monthCount}>{group.entries.length} {group.entries.length === 1 ? 'entry' : 'entries'}</Text>
+                </View>
+                {group.entries.map((entry, i) => {
+                  const d    = new Date(entry.timestamp);
+                  const date = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                  const day  = d.toLocaleDateString('en-IN', { weekday: 'short' });
+                  const isLast = i === group.entries.length - 1;
+                  return (
+                    <View key={entry.id} style={[styles.entryRow, isLast && styles.entryRowLast]}>
+                      <View style={styles.entryDot} />
+                      <View style={styles.entryInfo}>
+                        <Text style={styles.entryDate}>{day}, {date}</Text>
+                        <Text style={styles.entryTime}>{time}</Text>
+                      </View>
+                      <View style={styles.entryRight}>
+                        <Text style={styles.confidenceVal}>{Math.round(entry.similarity * 100)}%</Text>
+                        <Text style={styles.confidenceLbl}>match</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </Card>
+            ))
+          )}
+        </View>
 
-      <Button label="Remove Worker" onPress={handleDelete} variant="destructive" style={styles.deleteBtn} />
-    </ScrollView>
+        <Button label="Remove Worker" onPress={handleDelete} variant="destructive" style={styles.deleteBtn} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea  : { flex: 1, backgroundColor: COLORS.background },
   container : { flex: 1, backgroundColor: COLORS.background },
   content   : { paddingHorizontal: SPACING.screen, paddingBottom: 48 },
 

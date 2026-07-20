@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, Image, TextInput, Animated, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllWorkers, getTodayPresentWorkerIds, deleteWorker, Worker } from '../services/DatabaseService';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
@@ -73,7 +74,7 @@ export default function WorkerListScreen({ navigation }: any) {
   const getAccent = (name: string) => ACCENTS[name.charCodeAt(0) % ACCENTS.length];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       {/* Header stats */}
       <Card style={styles.statsBar}>
         <View style={styles.statItem}>
@@ -191,7 +192,7 @@ export default function WorkerListScreen({ navigation }: any) {
           }}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

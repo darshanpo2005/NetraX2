@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, RefreshControl, Alert, Dimensions, Animated, Easing,
+  ScrollView, RefreshControl, Alert, Dimensions, Animated, Easing, StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getWorkerCount, getTodayAttendanceCount, getUnsyncedLogs } from '../services/DatabaseService';
@@ -88,7 +89,9 @@ export default function HomeScreen({ navigation }: any) {
     : 'All attendance records synced.';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#080C14" />
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
@@ -246,7 +249,7 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.footerText}>LAST SYNC · {lastSyncLabel}</Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

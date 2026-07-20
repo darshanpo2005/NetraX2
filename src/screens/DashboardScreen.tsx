@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
-  Dimensions, ActivityIndicator, Image, StatusBar,
+  Dimensions, ActivityIndicator, Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import BarChart from '../components/BarChart';
 import {
@@ -19,7 +20,6 @@ import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
 const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
-const TOP_INSET = StatusBar.currentHeight || 44;
 
 export default function DashboardScreen() {
   const [loading, setLoading]       = useState(true);
@@ -75,101 +75,104 @@ export default function DashboardScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['left', 'right', 'bottom']}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading dashboard…</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Date header */}
-      <View style={styles.dateRow}>
-        <Text style={styles.dateLabel}>
-          {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </Text>
-        <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE</Text>
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Date header */}
+        <View style={styles.dateRow}>
+          <Text style={styles.dateLabel}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Text>
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Summary cards */}
-      <SectionLabel title="TODAY'S OVERVIEW" />
-      <View style={styles.summaryGrid}>
-        {summaryCards.map(card => (
-          <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
-            <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
-            <Text style={styles.summaryLabel}>{card.label}</Text>
-          </Card>
-        ))}
-      </View>
+        {/* Summary cards */}
+        <SectionLabel title="TODAY'S OVERVIEW" />
+        <View style={styles.summaryGrid}>
+          {summaryCards.map(card => (
+            <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
+              <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
+              <Text style={styles.summaryLabel}>{card.label}</Text>
+            </Card>
+          ))}
+        </View>
 
-      {/* Weekly bar chart */}
-      <SectionLabel title="7-DAY ATTENDANCE" />
-      <Card noPadding style={styles.chartCard}>
-        <BarChart data={barData} />
-      </Card>
+        {/* Weekly bar chart */}
+        <SectionLabel title="7-DAY ATTENDANCE" />
+        <Card noPadding style={styles.chartCard}>
+          <BarChart data={barData} />
+        </Card>
 
-      {/* Worker attendance list */}
-      <SectionLabel title={`WORKFORCE · ${streaks.length} workers`} />
-      <Card noPadding style={styles.listCard}>
-        {streaks.length === 0 ? (
-          <Text style={styles.emptyText}>No workers enrolled yet.</Text>
-        ) : (
-          streaks.map((w, i) => (
-            <View
-              key={w.workerId}
-              style={[styles.workerRow, i < streaks.length - 1 && styles.workerRowBorder]}
-            >
-              {w.photoUri ? (
-                <Image source={{ uri: w.photoUri }} style={styles.workerPhoto} />
-              ) : (
-                <View style={styles.workerInitials}>
-                  <Text style={styles.workerInitialsText}>{w.workerName[0]?.toUpperCase()}</Text>
+        {/* Worker attendance list */}
+        <SectionLabel title={`WORKFORCE · ${streaks.length} workers`} />
+        <Card noPadding style={styles.listCard}>
+          {streaks.length === 0 ? (
+            <Text style={styles.emptyText}>No workers enrolled yet.</Text>
+          ) : (
+            streaks.map((w, i) => (
+              <View
+                key={w.workerId}
+                style={[styles.workerRow, i < streaks.length - 1 && styles.workerRowBorder]}
+              >
+                {w.photoUri ? (
+                  <Image source={{ uri: w.photoUri }} style={styles.workerPhoto} />
+                ) : (
+                  <View style={styles.workerInitials}>
+                    <Text style={styles.workerInitialsText}>{w.workerName[0]?.toUpperCase()}</Text>
+                  </View>
+                )}
+
+                <View style={[styles.statusDot, { backgroundColor: w.presentToday ? COLORS.success : COLORS.error }]} />
+
+                <View style={styles.workerInfo}>
+                  <Text style={styles.workerName}>{w.workerName}</Text>
+                  <Text style={styles.workerSub}>
+                    {w.presentToday
+                      ? `In today at ${formatTime(w.lastSeen)}`
+                      : w.lastSeen
+                        ? `Last seen ${new Date(w.lastSeen).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+                        : 'No attendance yet'}
+                  </Text>
                 </View>
-              )}
 
-              <View style={[styles.statusDot, { backgroundColor: w.presentToday ? COLORS.success : COLORS.error }]} />
-
-              <View style={styles.workerInfo}>
-                <Text style={styles.workerName}>{w.workerName}</Text>
-                <Text style={styles.workerSub}>
-                  {w.presentToday
-                    ? `In today at ${formatTime(w.lastSeen)}`
-                    : w.lastSeen
-                      ? `Last seen ${new Date(w.lastSeen).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-                      : 'No attendance yet'}
-                </Text>
+                <View style={[styles.streakBadge, w.streak > 0 ? styles.streakActive : styles.streakZero]}>
+                  <Text style={[styles.streakText, { color: w.streak > 0 ? COLORS.warning : COLORS.textTertiary }]}>
+                    {w.streak}d
+                  </Text>
+                </View>
               </View>
+            ))
+          )}
+        </Card>
 
-              <View style={[styles.streakBadge, w.streak > 0 ? styles.streakActive : styles.streakZero]}>
-                <Text style={[styles.streakText, { color: w.streak > 0 ? COLORS.warning : COLORS.textTertiary }]}>
-                  {w.streak}d
-                </Text>
-              </View>
-            </View>
-          ))
-        )}
-      </Card>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>PULL DOWN TO REFRESH · DATA FROM ON-DEVICE SQLITE</Text>
-      </View>
-    </ScrollView>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>PULL DOWN TO REFRESH · DATA FROM ON-DEVICE SQLITE</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container        : { flex: 1, backgroundColor: COLORS.background, paddingTop: TOP_INSET },
+  safeArea         : { flex: 1, backgroundColor: COLORS.background },
+  container        : { flex: 1, backgroundColor: COLORS.background },
   content          : { padding: SPACING.screen, paddingBottom: 48 },
-  loadingContainer : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 16, paddingTop: TOP_INSET },
+  loadingContainer : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText      : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm },
 
   dateRow   : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.section },
