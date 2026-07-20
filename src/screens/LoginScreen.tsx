@@ -1,29 +1,26 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput, StyleSheet,
-  Animated, Vibration, Keyboard, StatusBar, TouchableWithoutFeedback,
+  View, Text, Pressable, StyleSheet,
+  Animated, Vibration, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
-import Button from '../components/Button';
 
 const ADMIN_PIN = '1234';
 const PIN_LENGTH = 4;
 const TOP_INSET = StatusBar.currentHeight || 44;
 
+const KEYPAD_ROWS: string[][] = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['',  '0', 'del'],
+];
+
 export default function LoginScreen({ navigation }: any) {
   const [pin, setPin]         = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(false);
-  const [focused, setFocused] = useState(false);
-  const shakeAnim             = useRef(new Animated.Value(0)).current;
-  const inputRef              = useRef<TextInput>(null);
-
-  const focusInput = () => inputRef.current?.focus();
-
-  useEffect(() => {
-    const timer = setTimeout(() => { inputRef.current?.focus(); }, 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const shakeAnim              = useRef(new Animated.Value(0)).current;
 
   const shake = () => {
     Vibration.vibrate(200);
@@ -35,18 +32,10 @@ export default function LoginScreen({ navigation }: any) {
     ]).start();
   };
 
-  const handleChangePin = (val: string) => {
-    const digits = val.replace(/[^0-9]/g, '').slice(0, PIN_LENGTH);
-    setError(false);
-    setPin(digits);
-  };
-
-  const handleSignIn = () => {
-    if (pin.length !== PIN_LENGTH || loading) return;
-    Keyboard.dismiss();
+  const attemptLogin = (candidate: string) => {
     setLoading(true);
     setTimeout(() => {
-      if (pin === ADMIN_PIN) {
+      if (candidate === ADMIN_PIN) {
         navigation.replace('MainTabs');
       } else {
         shake();
@@ -57,76 +46,104 @@ export default function LoginScreen({ navigation }: any) {
     }, 500);
   };
 
+  const handleDigitPress = (digit: string) => {
+    if (loading || pin.length >= PIN_LENGTH) return;
+    const next = pin + digit;
+    setError(false);
+    setPin(next);
+    if (next.length === PIN_LENGTH) attemptLogin(next);
+  };
+
+  const handleBackspace = () => {
+    if (loading || pin.length === 0) return;
+    setError(false);
+    setPin(p => p.slice(0, -1));
+  };
+
   return (
-    <TouchableWithoutFeedback onPress={focusInput}>
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#080C14" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#080C14" />
 
-        <View style={styles.logoSection}>
-          <View style={styles.logoGlow} />
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoEmoji}>🛡️</Text>
-          </View>
-          <Text style={styles.appName}>NetraX</Text>
-          <Text style={styles.appTagline}>SECURE OFFLINE AUTHENTICATION</Text>
+      <View style={styles.logoSection}>
+        <View style={styles.logoGlow} />
+        <View style={styles.logoCircle}>
+          <Text style={styles.logoEmoji}>🛡️</Text>
         </View>
+        <Text style={styles.appName}>NetraX</Text>
+        <Text style={styles.appTagline}>SECURE OFFLINE AUTHENTICATION</Text>
+      </View>
 
-        <View style={styles.formSection}>
-          <Text style={styles.heading}>Welcome Back</Text>
-          <Text style={styles.subheading}>Sign in to continue</Text>
+      <View style={styles.formSection}>
+        <Text style={styles.heading}>Welcome Back</Text>
+        <Text style={styles.subheading}>Enter your PIN to continue</Text>
 
-          <Animated.View style={[styles.pinRow, { transform: [{ translateX: shakeAnim }] }]}>
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => {
-              const isActive = focused && i === pin.length;
-              return (
-                <TouchableOpacity key={i} activeOpacity={0.8} onPress={focusInput}>
-                  <View
-                    style={[
-                      styles.pinBox,
-                      i < pin.length && styles.pinBoxFilled,
-                      isActive && styles.pinBoxActive,
-                      error && styles.pinBoxError,
-                    ]}
+        <Animated.View style={[styles.pinRow, { transform: [{ translateX: shakeAnim }] }]}>
+          {Array.from({ length: PIN_LENGTH }).map((_, i) => {
+            const isActive = i === pin.length && pin.length < PIN_LENGTH;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.pinBox,
+                  i < pin.length && styles.pinBoxFilled,
+                  isActive && styles.pinBoxActive,
+                  error && styles.pinBoxError,
+                ]}
+              >
+                {i < pin.length ? (
+                  <View style={[styles.pinDot, error && styles.pinDotError]} />
+                ) : null}
+              </View>
+            );
+          })}
+        </Animated.View>
+
+        {error ? (
+          <Text style={styles.errorText}>Incorrect PIN — try again</Text>
+        ) : loading ? (
+          <ActivityIndicator color={COLORS.primary} style={styles.loadingIndicator} />
+        ) : null}
+
+        <View style={[styles.keypad, loading && styles.keypadDisabled]}>
+          {KEYPAD_ROWS.map((row, ri) => (
+            <View key={ri} style={styles.keypadRow}>
+              {row.map((key, ci) => {
+                if (key === '') {
+                  return <View key={ci} style={styles.keypadBtn} />;
+                }
+                if (key === 'del') {
+                  return (
+                    <Pressable
+                      key={ci}
+                      onPress={handleBackspace}
+                      disabled={loading}
+                      style={({ pressed }) => [styles.keypadBtn, pressed && styles.keypadBtnActive]}
+                    >
+                      <Text style={styles.keypadText}>⌫</Text>
+                    </Pressable>
+                  );
+                }
+                return (
+                  <Pressable
+                    key={ci}
+                    onPress={() => handleDigitPress(key)}
+                    disabled={loading}
+                    style={({ pressed }) => [styles.keypadBtn, pressed && styles.keypadBtnActive]}
                   >
-                    {i < pin.length ? (
-                      <View style={[styles.pinDot, error && styles.pinDotError]} />
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </Animated.View>
-
-          <TextInput
-            ref={inputRef}
-            style={styles.hiddenInput}
-            value={pin}
-            onChangeText={handleChangePin}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            keyboardType="number-pad"
-            maxLength={PIN_LENGTH}
-            secureTextEntry
-            cursorColor="#2563EB"
-          />
-
-          {error ? <Text style={styles.errorText}>Incorrect PIN — try again</Text> : null}
-
-          <Button
-            label="Sign In"
-            onPress={handleSignIn}
-            disabled={pin.length !== PIN_LENGTH}
-            loading={loading}
-            style={styles.signInBtn}
-          />
-        </View>
-
-        <View style={styles.securityBadge}>
-          <View style={styles.securityDot} />
-          <Text style={styles.securityText}>256-BIT ENCRYPTED · OFFLINE MODE</Text>
+                    <Text style={styles.keypadText}>{key}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
         </View>
       </View>
-    </TouchableWithoutFeedback>
+
+      <View style={styles.securityBadge}>
+        <View style={styles.securityDot} />
+        <Text style={styles.securityText}>256-BIT ENCRYPTED · OFFLINE MODE</Text>
+      </View>
+    </View>
   );
 }
 
@@ -136,14 +153,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 64 + TOP_INSET,
-    paddingBottom: 64,
+    paddingTop: 48 + TOP_INSET,
+    paddingBottom: 32,
     paddingHorizontal: SPACING.screen,
   },
 
   logoSection: {
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 8,
   },
   logoGlow: {
     position: 'absolute',
@@ -154,21 +171,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryGlow,
   },
   logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: COLORS.surfaceElevated,
     borderWidth: 1,
     borderColor: COLORS.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   logoEmoji: {
-    fontSize: 44,
+    fontSize: 36,
   },
   appName: {
-    fontSize: FONT_SIZE.xxxl,
+    fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
     color: COLORS.textPrimary,
     letterSpacing: 2,
@@ -195,7 +212,7 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.light,
     color: COLORS.textSecondary,
     marginTop: 6,
-    marginBottom: 40,
+    marginBottom: 28,
   },
 
   pinRow: {
@@ -233,12 +250,6 @@ const styles = StyleSheet.create({
   pinDotError: {
     backgroundColor: COLORS.error,
   },
-  hiddenInput: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
 
   errorText: {
     color: COLORS.error,
@@ -247,9 +258,39 @@ const styles = StyleSheet.create({
     letterSpacing: TRACKING.label,
     marginTop: 16,
   },
+  loadingIndicator: {
+    marginTop: 16,
+  },
 
-  signInBtn: {
-    marginTop: 32,
+  keypad: {
+    width: '100%',
+    gap: 18,
+    marginTop: 28,
+  },
+  keypadDisabled: {
+    opacity: 0.5,
+  },
+  keypadRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  keypadBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#0F1923',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keypadBtnActive: {
+    backgroundColor: '#1E3A5F',
+  },
+  keypadText: {
+    fontSize: 28,
+    fontWeight: '300',
+    color: '#FFFFFF',
   },
 
   securityBadge: {
