@@ -89,7 +89,7 @@ export default function HomeScreen({ navigation }: any) {
     : 'All attendance records synced.';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#080C14" />
 
       {/* Header */}

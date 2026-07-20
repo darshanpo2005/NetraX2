@@ -44,6 +44,12 @@ export default function AttendanceScreen({ navigation }: any) {
   const livenessPassedRef    = useRef(false);
   const captureInProgressRef = useRef(false);
 
+  useEffect(() => {
+    const parentTabs = navigation.getParent?.();
+    parentTabs?.setOptions({ tabBarStyle: step === 'result' ? undefined : { display: 'none' } });
+    return () => parentTabs?.setOptions({ tabBarStyle: undefined });
+  }, [step, navigation]);
+
   // ─── RN Animated — result card ───────────────────────────────────────────
   const resultScaleAnim = useRef(new Animated.Value(0.8)).current;
   const resultFadeAnim  = useRef(new Animated.Value(0)).current;

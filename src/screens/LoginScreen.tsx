@@ -47,7 +47,7 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
     setTimeout(() => {
       if (pin === ADMIN_PIN) {
-        navigation.replace('Home');
+        navigation.replace('MainTabs');
       } else {
         shake();
         setError(true);

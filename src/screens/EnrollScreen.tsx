@@ -303,7 +303,7 @@ export default function EnrollScreen({ navigation }: any) {
       <Text style={styles.doneId}>ID: {empId}</Text>
       <Text style={styles.doneNote}>Real MobileFaceNet embeddings stored</Text>
 
-      <Button label="Back to Home" onPress={() => navigation.navigate('Home')} style={styles.doneBtn} />
+      <Button label="Back to Home" onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })} style={styles.doneBtn} />
       <Button label="Register Another" onPress={resetForm} variant="secondary" style={styles.doneBtn} />
     </View>
   );

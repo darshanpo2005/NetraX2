@@ -5,14 +5,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import SplashScreen from './src/screens/SplashScreen';
 import LoginScreen from './src/screens/LoginScreen';
-import HomeScreen from './src/screens/HomeScreen';
 import EnrollScreen from './src/screens/EnrollScreen';
-import AttendanceScreen from './src/screens/AttendanceScreen';
 import WorkerListScreen from './src/screens/WorkerListScreen';
 import WorkerDetailScreen from './src/screens/WorkerDetailScreen';
-import AdminScreen from './src/screens/AdminScreen';
-import AttendanceReportScreen from './src/screens/AttendanceReportScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
+import MainTabs from './src/navigation/MainTabs';
 import { COLORS } from './src/theme';
 
 const Stack = createStackNavigator();
@@ -31,16 +28,13 @@ export default function App() {
             cardStyle: { backgroundColor: COLORS.background },
           }}
         >
-          <Stack.Screen name="Splash"      component={SplashScreen}     options={{ headerShown: false }} />
-          <Stack.Screen name="Login"       component={LoginScreen}      options={{ headerShown: false }} />
-          <Stack.Screen name="Home"        component={HomeScreen}       options={{ headerShown: false }} />
-          <Stack.Screen name="Enroll"      component={EnrollScreen}     options={{ title: 'Register Worker' }} />
-          <Stack.Screen name="Attendance"  component={AttendanceScreen} options={{ title: 'Face Authentication' }} />
+          <Stack.Screen name="Splash"       component={SplashScreen}       options={{ headerShown: false }} />
+          <Stack.Screen name="Login"        component={LoginScreen}        options={{ headerShown: false }} />
+          <Stack.Screen name="MainTabs"     component={MainTabs}           options={{ headerShown: false }} />
+          <Stack.Screen name="Enroll"       component={EnrollScreen}       options={{ title: 'Register Worker' }} />
           <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
           <Stack.Screen name="WorkerDetail" component={WorkerDetailScreen} options={{ title: 'Worker Profile' }} />
-          <Stack.Screen name="Admin"       component={AdminScreen}           options={{ title: 'Admin Console' }} />
-          <Stack.Screen name="Reports"     component={AttendanceReportScreen} options={{ title: 'Attendance Reports' }} />
-          <Stack.Screen name="Dashboard"   component={DashboardScreen}        options={{ title: 'Dashboard' }} />
+          <Stack.Screen name="Dashboard"    component={DashboardScreen}    options={{ title: 'Dashboard' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

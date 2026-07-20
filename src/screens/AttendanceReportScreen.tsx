@@ -241,7 +241,7 @@ export default function AttendanceReportScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['left', 'right']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
