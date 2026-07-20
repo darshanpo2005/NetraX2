@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ScrollView, ActivityIndicator, Animated,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import { addWorker, workerExists, getAllWorkerEmbeddings } from '../services/DatabaseService';
@@ -69,7 +70,13 @@ export default function EnrollScreen({ navigation }: any) {
     if (!empId.trim()) { Alert.alert('Error', 'Enter employee ID'); return; }
     const exists = await workerExists(empId.trim());
     if (exists) { Alert.alert('Error', 'Employee ID already registered'); return; }
-    if (!hasPermission) { await requestPermission(); }
+    if (!hasPermission) {
+      const granted = await requestPermission();
+      if (!granted) {
+        Alert.alert('Camera Permission Required', 'Enable camera access in Settings to register workers.');
+        return;
+      }
+    }
     setStep('camera');
     setStatus('');
   };
@@ -179,39 +186,41 @@ export default function EnrollScreen({ navigation }: any) {
 
   // ── Form ──────────────────────────────────────────────────────────────────
   if (step === 'form') return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.formContent}>
-      <Text style={styles.formIcon}>👤</Text>
-      <Text style={styles.formTitle}>Register New Worker</Text>
-      <Text style={styles.formSubtitle}>Capture face from 5 angles for accurate recognition</Text>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.formContent}>
+        <Text style={styles.formIcon}>👤</Text>
+        <Text style={styles.formTitle}>Register New Worker</Text>
+        <Text style={styles.formSubtitle}>Capture face from 5 angles for accurate recognition</Text>
 
-      <Text style={styles.label}>Full Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Rahul Kumar"
-        placeholderTextColor={COLORS.textSecondary}
-        value={name}
-        onChangeText={setName}
-      />
+        <Text style={styles.label}>Full Name</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Rahul Kumar"
+          placeholderTextColor={COLORS.textSecondary}
+          value={name}
+          onChangeText={setName}
+        />
 
-      <Text style={styles.label}>Employee ID</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. EMP001"
-        placeholderTextColor={COLORS.textSecondary}
-        value={empId}
-        onChangeText={setEmpId}
-        autoCapitalize="characters"
-      />
+        <Text style={styles.label}>Employee ID</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. EMP001"
+          placeholderTextColor={COLORS.textSecondary}
+          value={empId}
+          onChangeText={setEmpId}
+          autoCapitalize="characters"
+        />
 
-      <Card style={styles.infoBox}>
-        <Text style={styles.infoText}>📸  5 face captures from different angles</Text>
-        <Text style={styles.infoText}>🧠  Real TFLite embeddings — MobileFaceNet INT8</Text>
-        <Text style={styles.infoText}>🔒  All data stored encrypted on-device</Text>
-        <Text style={styles.infoText}>📡  ML Kit face detection — server-free</Text>
-      </Card>
+        <Card style={styles.infoBox}>
+          <Text style={styles.infoText}>📸  5 face captures from different angles</Text>
+          <Text style={styles.infoText}>🧠  Real TFLite embeddings — MobileFaceNet INT8</Text>
+          <Text style={styles.infoText}>🔒  All data stored encrypted on-device</Text>
+          <Text style={styles.infoText}>📡  ML Kit face detection — server-free</Text>
+        </Card>
 
-      <Button label="Start Face Capture" onPress={handleStartCapture} style={styles.startBtn} />
-    </ScrollView>
+        <Button label="Start Face Capture" onPress={handleStartCapture} style={styles.startBtn} />
+      </ScrollView>
+    </SafeAreaView>
   );
 
   // ── Camera ────────────────────────────────────────────────────────────────
@@ -287,16 +296,16 @@ export default function EnrollScreen({ navigation }: any) {
 
   // ── Processing ────────────────────────────────────────────────────────────
   if (step === 'processing') return (
-    <View style={styles.center}>
+    <SafeAreaView style={styles.center} edges={['left', 'right', 'bottom']}>
       <ActivityIndicator size="large" color={COLORS.primary} />
       <Text style={styles.processingText}>Processing face data...</Text>
       <Text style={styles.processingSubtext}>Averaging {REQUIRED_CAPTURES} TFLite embeddings</Text>
-    </View>
+    </SafeAreaView>
   );
 
   // ── Done ──────────────────────────────────────────────────────────────────
   return (
-    <View style={styles.center}>
+    <SafeAreaView style={styles.center} edges={['left', 'right', 'bottom']}>
       <Text style={styles.doneIcon}>✅</Text>
       <Text style={styles.successText}>Worker Registered!</Text>
       <Text style={styles.doneName}>{name}</Text>
@@ -305,7 +314,7 @@ export default function EnrollScreen({ navigation }: any) {
 
       <Button label="Back to Home" onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })} style={styles.doneBtn} />
       <Button label="Register Another" onPress={resetForm} variant="secondary" style={styles.doneBtn} />
-    </View>
+    </SafeAreaView>
   );
 }
 

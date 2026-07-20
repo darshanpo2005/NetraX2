@@ -8,10 +8,17 @@ export const loadFaceModel = async (): Promise<TensorflowModel> => {
   // Deduplicate concurrent load calls
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
-    // require() returns a numeric asset ID in SDK 52-54 that fast-tflite resolves natively
-    const asset = require('../../assets/mobilefacenet.tflite');
-    model = await loadTensorflowModel(asset);
-    return model;
+    try {
+      // require() returns a numeric asset ID in SDK 52-54 that fast-tflite resolves natively
+      const asset = require('../../assets/mobilefacenet.tflite');
+      model = await loadTensorflowModel(asset);
+      return model;
+    } catch (e) {
+      // Don't cache a rejected promise — let the next call retry instead of
+      // permanently breaking recognition until the app restarts.
+      loadPromise = null;
+      throw e;
+    }
   })();
   return loadPromise;
 };

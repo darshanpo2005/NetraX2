@@ -65,8 +65,12 @@ export default function WorkerListScreen({ navigation }: any) {
     Alert.alert('Remove Worker', `Remove ${worker.name} from the system?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
-        await deleteWorker(worker.id);
-        setWorkers(w => w.filter(x => x.id !== worker.id));
+        try {
+          await deleteWorker(worker.id);
+          setWorkers(w => w.filter(x => x.id !== worker.id));
+        } catch (e: any) {
+          Alert.alert('Error', e.message);
+        }
       }},
     ]);
   };

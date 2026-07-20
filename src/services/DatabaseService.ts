@@ -220,78 +220,6 @@ export interface AttendanceRow {
   location: string;
 }
 
-export const getAttendanceWithWorkers = async (
-  filter: 'today' | 'week' | 'month' | 'all'
-): Promise<AttendanceRow[]> => {
-  const database = getDb();
-  const now = Date.now();
-  let since = 0;
-  if (filter === 'today') {
-    const d = new Date(); d.setHours(0, 0, 0, 0); since = d.getTime();
-  } else if (filter === 'week') {
-    since = now - 7 * 24 * 60 * 60 * 1000;
-  } else if (filter === 'month') {
-    since = now - 30 * 24 * 60 * 60 * 1000;
-  }
-  const sql = filter === 'all'
-    ? `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
-         FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
-         ORDER BY a.timestamp DESC`
-    : `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
-         FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
-         WHERE a.timestamp >= ? ORDER BY a.timestamp DESC`;
-  const rows = (filter === 'all'
-    ? await database.getAllAsync(sql)
-    : await database.getAllAsync(sql, [since])) as any[];
-  return rows.map(r => {
-    const d = new Date(r.timestamp);
-    return {
-      workerName: r.worker_name,
-      employeeId: r.emp_id ?? '',
-      timestamp : r.timestamp,
-      similarity: r.similarity,
-      location  : r.location ?? '',
-      date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-      day : d.toLocaleDateString('en-IN', { weekday: 'long' }),
-    };
-  });
-};
-
-export const getAttendanceRecords = async (
-  filter: 'today' | 'week' | 'month' | 'all'
-): Promise<AttendanceRecord[]> => {
-  const database = getDb();
-  const now = Date.now();
-  let since = 0;
-  if (filter === 'today') {
-    const d = new Date(); d.setHours(0, 0, 0, 0); since = d.getTime();
-  } else if (filter === 'week') {
-    since = now - 7 * 24 * 60 * 60 * 1000;
-  } else if (filter === 'month') {
-    since = now - 30 * 24 * 60 * 60 * 1000;
-  }
-  const sql = filter === 'all'
-    ? `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
-         FROM attendance_log a
-         LEFT JOIN workers w ON a.worker_id = w.id
-         ORDER BY a.timestamp DESC`
-    : `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
-         FROM attendance_log a
-         LEFT JOIN workers w ON a.worker_id = w.id
-         WHERE a.timestamp >= ?
-         ORDER BY a.timestamp DESC`;
-  const rows = (filter === 'all'
-    ? await database.getAllAsync(sql)
-    : await database.getAllAsync(sql, [since])) as any[];
-  return rows.map(r => ({
-    id: r.id, workerId: r.worker_id, workerName: r.worker_name,
-    timestamp: r.timestamp, similarity: r.similarity,
-    synced: r.synced, location: r.location,
-    employeeId: r.emp_id ?? '',
-  }));
-};
-
 // ─── Dashboard queries ────────────────────────────────────────────────────────
 
 export interface TodayWorker {
@@ -520,8 +448,8 @@ export const getAllWorkerEmbeddings = async (): Promise<Array<{
   embedding: number[];
 }>> => {
   try {
-    const db = getDb();
-    const result = await db.getAllAsync('SELECT id, name, embedding FROM workers WHERE removed_at IS NULL') as any[];
+    const database = getDb();
+    const result = await database.getAllAsync('SELECT id, name, embedding FROM workers WHERE removed_at IS NULL') as any[];
     return result.map((r: any) => ({
       id: r.id,
       name: r.name,
@@ -694,12 +622,15 @@ export interface AbsenceRow {
 }
 
 /** Day-by-day absentee rows (display-formatted date) for a timestamp range — used by report exports. */
+const MAX_ABSENCE_RANGE_DAYS = 366;
+
 export const getAbsenceRowsForDateRange = async (fromTs: number, toTs: number): Promise<AbsenceRow[]> => {
   const rows: AbsenceRow[] = [];
   const startDay = new Date(fromTs); startDay.setHours(0, 0, 0, 0);
   const endDay   = new Date(toTs);   endDay.setHours(0, 0, 0, 0);
+  const cappedEnd = Math.min(endDay.getTime(), startDay.getTime() + (MAX_ABSENCE_RANGE_DAYS - 1) * 86_400_000);
 
-  for (let t = startDay.getTime(); t <= endDay.getTime(); t += 86_400_000) {
+  for (let t = startDay.getTime(); t <= cappedEnd; t += 86_400_000) {
     const d = new Date(t);
     const key = formatDateKey(d);
     const [absentees, marked] = await Promise.all([

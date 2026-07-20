@@ -55,7 +55,12 @@ export default function WorkerDetailScreen({ route, navigation }: any) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: async () => {
-          await deleteWorker(worker.id);
+          try {
+            await deleteWorker(worker.id);
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+            return;
+          }
           navigation.goBack();
           const result = await syncAndPurge();
           Alert.alert(

@@ -58,11 +58,16 @@ export default function HomeScreen({ navigation }: any) {
   const pulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0.3] });
 
   const loadStats = async () => {
-    const [workers, today, unsynced, net] = await Promise.all([
-      getWorkerCount(), getTodayAttendanceCount(), getUnsyncedLogs(), isOnline(),
-    ]);
-    setStats({ workers, today, pending: unsynced.length });
-    setOnline(net);
+    try {
+      const [workers, today, unsynced, net] = await Promise.all([
+        getWorkerCount(), getTodayAttendanceCount(), getUnsyncedLogs(), isOnline(),
+      ]);
+      setStats({ workers, today, pending: unsynced.length });
+      setOnline(net);
+    } catch {
+      // Keep showing the last known stats rather than leaving the pull-to-refresh
+      // spinner stuck (handleRefresh awaits this and only stops it afterward).
+    }
   };
 
   useFocusEffect(useCallback(() => { loadStats(); }, []));

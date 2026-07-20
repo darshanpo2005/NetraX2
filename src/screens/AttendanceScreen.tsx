@@ -318,11 +318,17 @@ export default function AttendanceScreen({ navigation }: any) {
   }, [startLiveness]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Mount / unmount ──────────────────────────────────────────────────────
+  // Only start the liveness countdown once permission is actually granted —
+  // otherwise the 12s timer burns down while the user is still looking at
+  // the permission-request screen, and can expire before they ever see the camera.
   useEffect(() => {
-    if (!hasPermission) requestPermission();
+    if (!hasPermission) {
+      requestPermission();
+      return;
+    }
     startLiveness();
     return () => stopAllRef.current();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasPermission]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Permission guard ─────────────────────────────────────────────────────
   if (!hasPermission) return (

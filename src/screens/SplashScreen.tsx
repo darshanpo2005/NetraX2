@@ -44,7 +44,14 @@ export default function SplashScreen({ navigation }: any) {
     }, 600);
 
     const init = async () => {
-      await initDatabase();
+      try {
+        await initDatabase();
+      } catch (e) {
+        // Surface nothing here — screens that depend on the DB already
+        // handle read/write failures gracefully. Don't strand the user
+        // on the splash screen over an init hiccup.
+        console.error('initDatabase failed:', e);
+      }
       await new Promise(r => setTimeout(r, 2800));
       navigation.replace('Login');
     };

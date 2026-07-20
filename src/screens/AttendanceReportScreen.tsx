@@ -210,7 +210,16 @@ export default function AttendanceReportScreen() {
 
   useFocusEffect(useCallback(() => { loadAll(fromDateRef.current, toDateRef.current); }, []));
 
-  const applyRange = () => loadAll(fromDate, toDate);
+  const applyRange = () => {
+    // Guard against a reversed range (From set after To) silently returning no data.
+    if (fromDate.getTime() > toDate.getTime()) {
+      setFromDate(toDate);
+      setToDate(fromDate);
+      loadAll(toDate, fromDate);
+    } else {
+      loadAll(fromDate, toDate);
+    }
+  };
 
   const rangeLabel = `${fmtDate(fromDate)} – ${fmtDate(toDate)}`;
   const slug       = `${fromDate.toISOString().slice(0, 10)}_${toDate.toISOString().slice(0, 10)}`;

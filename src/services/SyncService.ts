@@ -2,7 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { createClient } from '@supabase/supabase-js';
 import {
   getUnsyncedAttendanceRecords, markAsSynced, purgeSyncedLogs, getAllWorkers, getSoftDeletedWorkers,
-  getAllAbsenceRecords,
+  getAllAbsenceRecords, formatDateKey,
 } from './DatabaseService';
 
 const supabase = createClient(
@@ -21,6 +21,14 @@ export const isOnline = async (): Promise<boolean> => {
 
 const enrolledAtMs = (createdAt: number | string) =>
   typeof createdAt === 'string' ? new Date(createdAt).getTime() : Number(createdAt);
+
+/** "HH:MM:SS" in local time — matches formatDateKey's local-time convention. */
+const formatTimeKey = (d: Date): string => {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+};
 
 /** Best-effort backup of currently-active workers (no face embeddings — privacy). */
 const syncPresentWorkers = async () => {
@@ -110,8 +118,8 @@ export const syncAndPurge = async (): Promise<{
           timestamp: typeof l.timestamp === 'string'
             ? new Date(l.timestamp).getTime()
             : Number(l.timestamp),
-          date: d.toISOString().slice(0, 10),
-          time: d.toISOString().slice(11, 19),
+          date: formatDateKey(d),
+          time: formatTimeKey(d),
           similarity: l.similarity,
           device_id: DEVICE_ID,
         };

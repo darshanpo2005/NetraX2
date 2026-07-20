@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { getAttendanceLogs, getWorkerCount, getTodayAttendanceCount } from '../services/DatabaseService';
 import { isOnline } from '../services/SyncService';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
@@ -29,7 +30,7 @@ export default function AdminScreen() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useFocusEffect(useCallback(() => { loadData(); }, []));
 
   const benchmarks = [
     { label: 'Model Size',   value: '1.33 MB', target: '< 20 MB',   pass: true },
