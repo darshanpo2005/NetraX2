@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, StyleSheet,
-  Animated, Vibration, Keyboard, StatusBar,
+  Animated, Vibration, Keyboard, StatusBar, TouchableWithoutFeedback,
 } from 'react-native';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
 import Button from '../components/Button';
@@ -17,6 +17,13 @@ export default function LoginScreen({ navigation }: any) {
   const [focused, setFocused] = useState(false);
   const shakeAnim             = useRef(new Animated.Value(0)).current;
   const inputRef              = useRef<TextInput>(null);
+
+  const focusInput = () => inputRef.current?.focus();
+
+  useEffect(() => {
+    const timer = setTimeout(() => { inputRef.current?.focus(); }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const shake = () => {
     Vibration.vibrate(200);
@@ -51,79 +58,75 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#080C14" />
+    <TouchableWithoutFeedback onPress={focusInput}>
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#080C14" />
 
-      <View style={styles.logoSection}>
-        <View style={styles.logoGlow} />
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoEmoji}>🛡️</Text>
+        <View style={styles.logoSection}>
+          <View style={styles.logoGlow} />
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoEmoji}>🛡️</Text>
+          </View>
+          <Text style={styles.appName}>NetraX</Text>
+          <Text style={styles.appTagline}>SECURE OFFLINE AUTHENTICATION</Text>
         </View>
-        <Text style={styles.appName}>NetraX</Text>
-        <Text style={styles.appTagline}>SECURE OFFLINE AUTHENTICATION</Text>
-      </View>
 
-      <View style={styles.formSection}>
-        <Text style={styles.heading}>Welcome Back</Text>
-        <Text style={styles.subheading}>Sign in to continue</Text>
+        <View style={styles.formSection}>
+          <Text style={styles.heading}>Welcome Back</Text>
+          <Text style={styles.subheading}>Sign in to continue</Text>
 
-        <TouchableOpacity
-          style={styles.pinTouchArea}
-          activeOpacity={1}
-          onPress={() => inputRef.current?.focus()}
-        >
           <Animated.View style={[styles.pinRow, { transform: [{ translateX: shakeAnim }] }]}>
             {Array.from({ length: PIN_LENGTH }).map((_, i) => {
               const isActive = focused && i === pin.length;
               return (
-                <View
-                  key={i}
-                  style={[
-                    styles.pinBox,
-                    i < pin.length && styles.pinBoxFilled,
-                    isActive && styles.pinBoxActive,
-                    error && styles.pinBoxError,
-                  ]}
-                >
-                  {i < pin.length ? (
-                    <View style={[styles.pinDot, error && styles.pinDotError]} />
-                  ) : null}
-                </View>
+                <TouchableOpacity key={i} activeOpacity={0.8} onPress={focusInput}>
+                  <View
+                    style={[
+                      styles.pinBox,
+                      i < pin.length && styles.pinBoxFilled,
+                      isActive && styles.pinBoxActive,
+                      error && styles.pinBoxError,
+                    ]}
+                  >
+                    {i < pin.length ? (
+                      <View style={[styles.pinDot, error && styles.pinDotError]} />
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </Animated.View>
-        </TouchableOpacity>
 
-        <TextInput
-          ref={inputRef}
-          style={styles.hiddenInput}
-          value={pin}
-          onChangeText={handleChangePin}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          keyboardType="number-pad"
-          maxLength={PIN_LENGTH}
-          autoFocus
-          secureTextEntry
-          cursorColor="#2563EB"
-        />
+          <TextInput
+            ref={inputRef}
+            style={styles.hiddenInput}
+            value={pin}
+            onChangeText={handleChangePin}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            keyboardType="number-pad"
+            maxLength={PIN_LENGTH}
+            secureTextEntry
+            cursorColor="#2563EB"
+          />
 
-        {error ? <Text style={styles.errorText}>Incorrect PIN — try again</Text> : null}
+          {error ? <Text style={styles.errorText}>Incorrect PIN — try again</Text> : null}
 
-        <Button
-          label="Sign In"
-          onPress={handleSignIn}
-          disabled={pin.length !== PIN_LENGTH}
-          loading={loading}
-          style={styles.signInBtn}
-        />
+          <Button
+            label="Sign In"
+            onPress={handleSignIn}
+            disabled={pin.length !== PIN_LENGTH}
+            loading={loading}
+            style={styles.signInBtn}
+          />
+        </View>
+
+        <View style={styles.securityBadge}>
+          <View style={styles.securityDot} />
+          <Text style={styles.securityText}>256-BIT ENCRYPTED · OFFLINE MODE</Text>
+        </View>
       </View>
-
-      <View style={styles.securityBadge}>
-        <View style={styles.securityDot} />
-        <Text style={styles.securityText}>256-BIT ENCRYPTED · OFFLINE MODE</Text>
-      </View>
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -195,10 +198,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
 
-  pinTouchArea: {
-    width: '100%',
-    alignItems: 'center',
-  },
   pinRow: {
     flexDirection: 'row',
     gap: 16,
