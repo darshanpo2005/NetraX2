@@ -73,7 +73,7 @@ export default function HomeScreen({ navigation }: any) {
     setSyncing(false);
     await loadStats();
     if (r.success) setLastSync(Date.now());
-    Alert.alert(r.success ? 'Sync Complete' : 'Sync Failed', r.success ? `Synced ${r.synced} records` : (r.error ?? 'Unknown error'));
+    Alert.alert(r.success ? 'Sync Complete' : 'Sync Failed', r.message);
   };
 
   const absent = Math.max(0, stats.workers - stats.today);

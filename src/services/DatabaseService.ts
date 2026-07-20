@@ -131,9 +131,31 @@ export const markAsSynced = async (ids: string[]) => {
   await database.runAsync(`UPDATE attendance_log SET synced = 1 WHERE id IN (${placeholders})`, ids);
 };
 
-export const purgeSyncedLogs = async () => {
+/** Deletes already-synced logs older than `olderThanDays`. Returns rows deleted. */
+export const purgeSyncedLogs = async (olderThanDays = 30): Promise<number> => {
   const database = getDb();
-  await database.runAsync('DELETE FROM attendance_log WHERE synced = 1');
+  const cutoff = Date.now() - olderThanDays * 86_400_000;
+  const result = await database.runAsync(
+    'DELETE FROM attendance_log WHERE synced = 1 AND timestamp < ?', [cutoff]
+  );
+  return result.changes ?? 0;
+};
+
+/** Unsynced logs joined with the worker's employee_id, for cloud upload. */
+export const getUnsyncedAttendanceRecords = async (): Promise<AttendanceRecord[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync(
+    `SELECT a.*, COALESCE(w.employee_id, '') AS emp_id
+       FROM attendance_log a LEFT JOIN workers w ON a.worker_id = w.id
+      WHERE a.synced = 0
+      ORDER BY a.timestamp ASC`
+  ) as any[];
+  return rows.map(r => ({
+    id: r.id, workerId: r.worker_id, workerName: r.worker_name,
+    timestamp: r.timestamp, similarity: r.similarity,
+    synced: r.synced, location: r.location,
+    employeeId: r.emp_id ?? '',
+  }));
 };
 
 export const getTodayAttendanceCount = async (): Promise<number> => {
