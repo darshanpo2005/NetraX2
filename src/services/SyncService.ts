@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import { createClient } from '@supabase/supabase-js';
 import {
-  getUnsyncedAttendanceRecords, markAsSynced, purgeSyncedLogs, getAllWorkers,
+  getUnsyncedAttendanceRecords, markAsSynced, purgeSyncedLogs, getAllWorkers, getSoftDeletedWorkers,
 } from './DatabaseService';
 
 const supabase = createClient(
@@ -18,8 +18,11 @@ export const isOnline = async (): Promise<boolean> => {
   return !!(state.isConnected && state.isInternetReachable);
 };
 
-/** Best-effort backup of enrolled workers (no face embeddings — privacy). */
-const syncWorkersBackup = async () => {
+const enrolledAtMs = (createdAt: number | string) =>
+  typeof createdAt === 'string' ? new Date(createdAt).getTime() : Number(createdAt);
+
+/** Best-effort backup of currently-active workers (no face embeddings — privacy). */
+const syncPresentWorkers = async () => {
   try {
     const workers = await getAllWorkers();
     if (!workers.length) return;
@@ -28,13 +31,33 @@ const syncWorkersBackup = async () => {
       id: w.id,
       name: w.name,
       employee_id: w.employeeId,
-      enrolled_at: typeof w.createdAt === 'string'
-        ? new Date(w.createdAt).getTime()
-        : Number(w.createdAt),
+      enrolled_at: enrolledAtMs(w.createdAt),
       device_id: DEVICE_ID,
     }));
 
-    await supabase.from('workers_backup').upsert(rows, { onConflict: 'id' });
+    await supabase.from('present_workers').upsert(rows, { onConflict: 'id' });
+  } catch {
+    // Non-critical — attendance sync already succeeded, don't fail the whole operation
+  }
+};
+
+/** Moves soft-deleted workers from present_workers to past_workers in Supabase. */
+const syncPastWorkers = async () => {
+  try {
+    const removed = await getSoftDeletedWorkers();
+    if (!removed.length) return;
+
+    const rows = removed.map(w => ({
+      id: w.id,
+      name: w.name,
+      employee_id: w.employeeId,
+      enrolled_at: enrolledAtMs(w.createdAt),
+      removed_at: enrolledAtMs(w.removedAt ?? Date.now()),
+      device_id: DEVICE_ID,
+    }));
+
+    await supabase.from('past_workers').upsert(rows, { onConflict: 'id' });
+    await supabase.from('present_workers').delete().in('id', removed.map(w => w.id));
   } catch {
     // Non-critical — attendance sync already succeeded, don't fail the whole operation
   }
@@ -77,7 +100,8 @@ export const syncAndPurge = async (): Promise<{
       await markAsSynced(logs.map(l => l.id));
     }
 
-    await syncWorkersBackup();
+    await syncPresentWorkers();
+    await syncPastWorkers();
     const purged = await purgeSyncedLogs(30);
 
     return {

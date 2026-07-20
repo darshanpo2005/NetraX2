@@ -7,6 +7,7 @@ export interface Worker {
   embedding: number[];
   createdAt: number;
   photoUri?: string | null;
+  removedAt?: number | null;
 }
 
 export interface AttendanceLog {
@@ -53,6 +54,12 @@ export const initDatabase = async () => {
   } catch {
     // Column already exists — safe to ignore
   }
+  // Migration: add removed_at for soft-delete support on existing databases
+  try {
+    await database.execAsync('ALTER TABLE workers ADD COLUMN removed_at INTEGER DEFAULT NULL');
+  } catch {
+    // Column already exists — safe to ignore
+  }
 };
 
 export const addWorker = async (worker: Worker) => {
@@ -65,29 +72,49 @@ export const addWorker = async (worker: Worker) => {
 
 export const getAllWorkers = async (): Promise<Worker[]> => {
   const database = getDb();
-  const rows = await database.getAllAsync('SELECT * FROM workers ORDER BY created_at DESC') as any[];
+  const rows = await database.getAllAsync(
+    'SELECT * FROM workers WHERE removed_at IS NULL ORDER BY created_at DESC'
+  ) as any[];
   return rows.map(r => ({
     id: r.id, name: r.name, employeeId: r.employee_id,
     embedding: JSON.parse(r.embedding), createdAt: r.created_at,
     photoUri: r.photo_uri ?? null,
+    removedAt: r.removed_at ?? null,
+  }));
+};
+
+/** Soft-deleted workers, most recently removed first. */
+export const getSoftDeletedWorkers = async (): Promise<Worker[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync(
+    'SELECT * FROM workers WHERE removed_at IS NOT NULL ORDER BY removed_at DESC'
+  ) as any[];
+  return rows.map(r => ({
+    id: r.id, name: r.name, employeeId: r.employee_id,
+    embedding: JSON.parse(r.embedding), createdAt: r.created_at,
+    photoUri: r.photo_uri ?? null,
+    removedAt: r.removed_at ?? null,
   }));
 };
 
 export const getWorkerCount = async (): Promise<number> => {
   const database = getDb();
-  const result = await database.getFirstAsync('SELECT COUNT(*) as count FROM workers') as any;
+  const result = await database.getFirstAsync(
+    'SELECT COUNT(*) as count FROM workers WHERE removed_at IS NULL'
+  ) as any;
   return result?.count || 0;
 };
 
+/** Soft delete — marks the worker removed instead of erasing their row/history. */
 export const deleteWorker = async (id: string) => {
   const database = getDb();
-  await database.runAsync('DELETE FROM workers WHERE id = ?', [id]);
+  await database.runAsync('UPDATE workers SET removed_at = ? WHERE id = ?', [Date.now(), id]);
 };
 
 export const workerExists = async (employeeId: string): Promise<boolean> => {
   const database = getDb();
   const result = await database.getFirstAsync(
-    'SELECT COUNT(*) as count FROM workers WHERE employee_id = ?', [employeeId]
+    'SELECT COUNT(*) as count FROM workers WHERE employee_id = ? AND removed_at IS NULL', [employeeId]
   ) as any;
   return (result?.count || 0) > 0;
 };
@@ -484,7 +511,7 @@ export const getAllWorkerEmbeddings = async (): Promise<Array<{
 }>> => {
   try {
     const db = getDb();
-    const result = await db.getAllAsync('SELECT id, name, embedding FROM workers') as any[];
+    const result = await db.getAllAsync('SELECT id, name, embedding FROM workers WHERE removed_at IS NULL') as any[];
     return result.map((r: any) => ({
       id: r.id,
       name: r.name,

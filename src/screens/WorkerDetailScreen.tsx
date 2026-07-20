@@ -6,6 +6,7 @@ import {
   Worker, AttendanceLog, deleteWorker,
   getWorkerAttendanceHistory, getWorkerStats, WorkerStats,
 } from '../services/DatabaseService';
+import { syncAndPurge } from '../services/SyncService';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, SPACING } from '../theme';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -49,12 +50,17 @@ export default function WorkerDetailScreen({ route, navigation }: any) {
   const handleDelete = () => {
     Alert.alert(
       'Remove Worker',
-      `Permanently remove ${worker.name} from the system? This cannot be undone.`,
+      `Remove ${worker.name} from the active workforce? Their attendance history is kept, and this will sync to the cloud.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: async () => {
           await deleteWorker(worker.id);
           navigation.goBack();
+          const result = await syncAndPurge();
+          Alert.alert(
+            'Worker Removed',
+            result.success ? 'Worker removed and synced to cloud' : 'Worker removed locally — will sync when back online'
+          );
         }},
       ]
     );
