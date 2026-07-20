@@ -206,7 +206,7 @@ export default function HomeScreen({ navigation }: any) {
               <MaterialIcons name="cloud-off" size={24} color={COLORS.error} />
               <View style={styles.infoTextBlock}>
                 <Text style={[styles.infoTitle, { color: COLORS.error }]}>Sync Not Configured</Text>
-                <Text style={styles.infoSub}>Set AWS endpoint in SyncService.ts to enable</Text>
+                <Text style={styles.infoSub}>Set Supabase endpoint in SyncService.ts to enable</Text>
               </View>
             </Card>
           ) : online ? (
@@ -215,7 +215,7 @@ export default function HomeScreen({ navigation }: any) {
                 <MaterialIcons name={syncing ? 'sync' : 'cloud-sync'} size={24} color={COLORS.primary} />
                 <View style={styles.infoTextBlock}>
                   <Text style={[styles.infoTitle, { color: COLORS.primary }]}>
-                    {syncing ? 'Syncing to AWS…' : 'Sync to AWS'}
+                    {syncing ? 'Syncing to Supabase…' : 'Sync to Supabase'}
                   </Text>
                   <Text style={styles.infoSub}>{stats.pending} records pending upload</Text>
                 </View>

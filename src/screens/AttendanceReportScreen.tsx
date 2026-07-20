@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Dimensions, Modal,
+  ActivityIndicator, Alert, Dimensions, Modal, StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BarChart from '../components/BarChart';
@@ -21,6 +21,7 @@ import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
 const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
+const TOP_INSET = StatusBar.currentHeight || 44;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -429,7 +430,7 @@ function ExportBtn({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root      : { flex: 1, backgroundColor: COLORS.background },
+  root      : { flex: 1, backgroundColor: COLORS.background, paddingTop: TOP_INSET },
   container : { flex: 1 },
   content   : { padding: SPACING.screen },
 

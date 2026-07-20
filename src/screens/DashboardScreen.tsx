@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
-  Dimensions, ActivityIndicator, Image,
+  Dimensions, ActivityIndicator, Image, StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import BarChart from '../components/BarChart';
@@ -19,6 +19,7 @@ import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
 const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
+const TOP_INSET = StatusBar.currentHeight || 44;
 
 export default function DashboardScreen() {
   const [loading, setLoading]       = useState(true);
@@ -166,9 +167,9 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container        : { flex: 1, backgroundColor: COLORS.background },
+  container        : { flex: 1, backgroundColor: COLORS.background, paddingTop: TOP_INSET },
   content          : { padding: SPACING.screen, paddingBottom: 48 },
-  loadingContainer : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  loadingContainer : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 16, paddingTop: TOP_INSET },
   loadingText      : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm },
 
   dateRow   : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.section },
