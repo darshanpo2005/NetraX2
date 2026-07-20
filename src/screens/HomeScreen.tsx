@@ -24,6 +24,7 @@ const ACTIONS = [
   { icon: 'admin-panel-settings',  label: 'Admin Console',   color: COLORS.warning, bg: COLORS.warningGlow, screen: 'Admin'      },
   { icon: 'assessment',            label: 'Reports',         color: COLORS.primary, bg: COLORS.primaryDim,  screen: 'Reports'    },
   { icon: 'dashboard',             label: 'Dashboard',       color: COLORS.success, bg: COLORS.successGlow, screen: 'Dashboard'  },
+  { icon: 'event-busy',            label: 'Absentees',       color: COLORS.error,   bg: COLORS.errorGlow,   screen: 'Absentees'  },
 ] as const;
 
 function greeting(): string {

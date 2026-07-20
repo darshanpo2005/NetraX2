@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
-  Dimensions, ActivityIndicator, Image,
+  Dimensions, ActivityIndicator, Image, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -21,7 +21,7 @@ import SectionLabel from '../components/SectionLabel';
 const { width } = Dimensions.get('window');
 const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }: any) {
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [totalWorkers, setTotal]    = useState(0);
@@ -105,10 +105,24 @@ export default function DashboardScreen() {
         <SectionLabel title="TODAY'S OVERVIEW" />
         <View style={styles.summaryGrid}>
           {summaryCards.map(card => (
-            <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
-              <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
-              <Text style={styles.summaryLabel}>{card.label}</Text>
-            </Card>
+            card.label === 'Absent' ? (
+              <TouchableOpacity
+                key={card.label}
+                style={styles.summaryCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Absentees')}
+              >
+                <Card accentColor={card.color} style={styles.summaryCardFill}>
+                  <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
+                  <Text style={styles.summaryLabel}>{card.label}</Text>
+                </Card>
+              </TouchableOpacity>
+            ) : (
+              <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
+                <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
+                <Text style={styles.summaryLabel}>{card.label}</Text>
+              </Card>
+            )
           ))}
         </View>
 
@@ -183,6 +197,7 @@ const styles = StyleSheet.create({
 
   summaryGrid  : { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.card, marginBottom: SPACING.card },
   summaryCard  : { width: SUMMARY_CARD_WIDTH },
+  summaryCardFill : { width: '100%' },
   summaryValue : { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
   summaryLabel : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold, textTransform: 'uppercase', letterSpacing: TRACKING.label, marginTop: 4 },
 

@@ -47,6 +47,16 @@ export const initDatabase = async () => {
       synced INTEGER DEFAULT 0,
       location TEXT DEFAULT ''
     );
+    CREATE TABLE IF NOT EXISTS absence_records (
+      id TEXT PRIMARY KEY,
+      worker_id TEXT NOT NULL,
+      worker_name TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      reason TEXT DEFAULT 'No show',
+      marked_by TEXT DEFAULT 'admin',
+      timestamp INTEGER NOT NULL
+    );
   `);
   // Migration: add photo_uri for existing databases that don't have it yet
   try {
@@ -523,4 +533,190 @@ export const getAllWorkerEmbeddings = async (): Promise<Array<{
     console.error('getAllWorkerEmbeddings error:', e.message);
     return [];
   }
+};
+
+// ─── Absence tracking ──────────────────────────────────────────────────────────
+// Absence is computed dynamically (no attendance record for the day) rather than
+// pre-populated at day start. "Marking" a worker absent just records a reason —
+// it never creates an attendance_log row.
+
+/** "YYYY-MM-DD" in local time, matching the day-boundary logic used elsewhere in this file. */
+export const formatDateKey = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const dayBoundsFromKey = (date: string): { start: number; end: number } => {
+  const [y, m, d] = date.split('-').map(Number);
+  const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+  return { start, end: start + 86_400_000 };
+};
+
+export interface AbsentWorker {
+  id: string;
+  name: string;
+  employeeId: string;
+  photoUri: string | null;
+}
+
+/** Active workers with no attendance_log row on the given date. */
+export const getAbsentWorkersForDate = async (date: string): Promise<AbsentWorker[]> => {
+  const database = getDb();
+  const { start, end } = dayBoundsFromKey(date);
+  const rows = await database.getAllAsync(
+    `SELECT id, name, employee_id, photo_uri FROM workers
+      WHERE removed_at IS NULL
+        AND id NOT IN (
+          SELECT DISTINCT worker_id FROM attendance_log WHERE timestamp >= ? AND timestamp < ?
+        )
+      ORDER BY name ASC`,
+    [start, end]
+  ) as any[];
+  return rows.map(r => ({
+    id: r.id, name: r.name, employeeId: r.employee_id, photoUri: r.photo_uri ?? null,
+  }));
+};
+
+export interface PresentWorker {
+  id: string;
+  name: string;
+  employeeId: string;
+  photoUri: string | null;
+  checkInTime: number;
+}
+
+/** Active workers with at least one attendance_log row on the given date, with first check-in time. */
+export const getPresentWorkersForDate = async (date: string): Promise<PresentWorker[]> => {
+  const database = getDb();
+  const { start, end } = dayBoundsFromKey(date);
+  const rows = await database.getAllAsync(
+    `SELECT w.id, w.name, w.employee_id, w.photo_uri, MIN(a.timestamp) AS check_in
+       FROM attendance_log a
+       JOIN workers w ON w.id = a.worker_id
+      WHERE a.timestamp >= ? AND a.timestamp < ? AND w.removed_at IS NULL
+      GROUP BY w.id, w.name, w.employee_id, w.photo_uri
+      ORDER BY check_in ASC`,
+    [start, end]
+  ) as any[];
+  return rows.map(r => ({
+    id: r.id, name: r.name, employeeId: r.employee_id, photoUri: r.photo_uri ?? null,
+    checkInTime: r.check_in,
+  }));
+};
+
+export interface AbsenceRecord {
+  id: string;
+  workerId: string;
+  workerName: string;
+  employeeId: string;
+  date: string;
+  reason: string;
+  markedBy: string;
+  timestamp: number;
+}
+
+/** Records (or updates) why a worker was absent on a given date. */
+export const markWorkerAbsent = async (
+  workerId: string, date: string, reason = 'No show', markedBy = 'admin'
+): Promise<AbsenceRecord> => {
+  const database = getDb();
+  const worker = await database.getFirstAsync(
+    'SELECT name, employee_id FROM workers WHERE id = ?', [workerId]
+  ) as any;
+
+  const record: AbsenceRecord = {
+    id: `${workerId}_${date}`,
+    workerId,
+    workerName: worker?.name ?? '',
+    employeeId: worker?.employee_id ?? '',
+    date,
+    reason,
+    markedBy,
+    timestamp: Date.now(),
+  };
+
+  await database.runAsync(
+    `INSERT OR REPLACE INTO absence_records
+       (id, worker_id, worker_name, employee_id, date, reason, marked_by, timestamp)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [record.id, record.workerId, record.workerName, record.employeeId, record.date, record.reason, record.markedBy, record.timestamp]
+  );
+
+  return record;
+};
+
+export const getAbsenceRecordsForDate = async (date: string): Promise<AbsenceRecord[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync(
+    'SELECT * FROM absence_records WHERE date = ? ORDER BY timestamp DESC', [date]
+  ) as any[];
+  return rows.map(r => ({
+    id: r.id, workerId: r.worker_id, workerName: r.worker_name, employeeId: r.employee_id,
+    date: r.date, reason: r.reason, markedBy: r.marked_by, timestamp: r.timestamp,
+  }));
+};
+
+/** All absence records ever recorded — used for cloud sync (small table, upserts are idempotent). */
+export const getAllAbsenceRecords = async (): Promise<AbsenceRecord[]> => {
+  const database = getDb();
+  const rows = await database.getAllAsync('SELECT * FROM absence_records ORDER BY timestamp DESC') as any[];
+  return rows.map(r => ({
+    id: r.id, workerId: r.worker_id, workerName: r.worker_name, employeeId: r.employee_id,
+    date: r.date, reason: r.reason, markedBy: r.marked_by, timestamp: r.timestamp,
+  }));
+};
+
+export interface AttendanceSummary {
+  present: PresentWorker[];
+  absent: AbsentWorker[];
+  manuallyMarked: AbsenceRecord[];
+}
+
+/** Present / not-yet-marked-absent / manually-marked-absent, split for the Absentee screen. */
+export const getAttendanceSummaryForDate = async (date: string): Promise<AttendanceSummary> => {
+  const [present, absentRaw, manuallyMarked] = await Promise.all([
+    getPresentWorkersForDate(date),
+    getAbsentWorkersForDate(date),
+    getAbsenceRecordsForDate(date),
+  ]);
+  const markedIds = new Set(manuallyMarked.map(m => m.workerId));
+  const absent = absentRaw.filter(a => !markedIds.has(a.id));
+  return { present, absent, manuallyMarked };
+};
+
+export interface AbsenceRow {
+  workerName: string;
+  employeeId: string;
+  date: string;
+  reason: string;
+}
+
+/** Day-by-day absentee rows (display-formatted date) for a timestamp range — used by report exports. */
+export const getAbsenceRowsForDateRange = async (fromTs: number, toTs: number): Promise<AbsenceRow[]> => {
+  const rows: AbsenceRow[] = [];
+  const startDay = new Date(fromTs); startDay.setHours(0, 0, 0, 0);
+  const endDay   = new Date(toTs);   endDay.setHours(0, 0, 0, 0);
+
+  for (let t = startDay.getTime(); t <= endDay.getTime(); t += 86_400_000) {
+    const d = new Date(t);
+    const key = formatDateKey(d);
+    const [absentees, marked] = await Promise.all([
+      getAbsentWorkersForDate(key),
+      getAbsenceRecordsForDate(key),
+    ]);
+    const reasonByWorkerId = new Map(marked.map(m => [m.workerId, m.reason]));
+    const dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    for (const a of absentees) {
+      rows.push({
+        workerName: a.name,
+        employeeId: a.employeeId,
+        date: dateLabel,
+        reason: reasonByWorkerId.get(a.id) ?? 'Not marked',
+      });
+    }
+  }
+  return rows;
 };

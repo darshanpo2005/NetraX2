@@ -9,6 +9,7 @@ import EnrollScreen from './src/screens/EnrollScreen';
 import WorkerListScreen from './src/screens/WorkerListScreen';
 import WorkerDetailScreen from './src/screens/WorkerDetailScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
+import AbsenteeScreen from './src/screens/AbsenteeScreen';
 import MainTabs from './src/navigation/MainTabs';
 import { COLORS } from './src/theme';
 
@@ -35,6 +36,7 @@ export default function App() {
           <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
           <Stack.Screen name="WorkerDetail" component={WorkerDetailScreen} options={{ title: 'Worker Profile' }} />
           <Stack.Screen name="Dashboard"    component={DashboardScreen}    options={{ title: 'Dashboard' }} />
+          <Stack.Screen name="Absentees"    component={AbsenteeScreen}     options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

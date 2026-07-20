@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { createClient } from '@supabase/supabase-js';
 import {
   getUnsyncedAttendanceRecords, markAsSynced, purgeSyncedLogs, getAllWorkers, getSoftDeletedWorkers,
+  getAllAbsenceRecords,
 } from './DatabaseService';
 
 const supabase = createClient(
@@ -63,6 +64,30 @@ const syncPastWorkers = async () => {
   }
 };
 
+/** Best-effort sync of recorded absences (small table — upserting all of it each time is cheap). */
+const syncAbsenceRecords = async () => {
+  try {
+    const records = await getAllAbsenceRecords();
+    if (!records.length) return;
+
+    const rows = records.map(r => ({
+      id: r.id,
+      worker_id: r.workerId,
+      worker_name: r.workerName,
+      employee_id: r.employeeId,
+      date: r.date,
+      reason: r.reason,
+      marked_by: r.markedBy,
+      timestamp: r.timestamp,
+      device_id: DEVICE_ID,
+    }));
+
+    await supabase.from('absence_records').upsert(rows, { onConflict: 'id' });
+  } catch {
+    // Non-critical — attendance sync already succeeded, don't fail the whole operation
+  }
+};
+
 export const syncAndPurge = async (): Promise<{
   success: boolean; synced: number; purged: number; error: string | null; message: string;
 }> => {
@@ -102,6 +127,7 @@ export const syncAndPurge = async (): Promise<{
 
     await syncPresentWorkers();
     await syncPastWorkers();
+    await syncAbsenceRecords();
     const purged = await purgeSyncedLogs(30);
 
     return {
