@@ -9,15 +9,18 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { addWorker, workerExists, getAllWorkerEmbeddings } from '../services/DatabaseService';
 import { l2Normalize, cosineSimilarity } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
+import Button from '../components/Button';
+import Card from '../components/Card';
 
 const REQUIRED_CAPTURES = 5;
 
 const CAPTURE_HINTS = [
-  { label: 'Look straight',       detail: 'Face the camera directly',   icon: '🔵' },
-  { label: 'Turn slightly left',  detail: 'Rotate your head ~15° left', icon: '↙️' },
-  { label: 'Turn slightly right', detail: 'Rotate your head ~15° right',icon: '↘️' },
-  { label: 'Tilt up slightly',    detail: 'Look slightly upward',        icon: '⬆️' },
-  { label: 'Look straight again', detail: 'Final capture — face forward',icon: '✅' },
+  { label: 'Look straight',       detail: 'Face the camera directly' },
+  { label: 'Turn slightly left',  detail: 'Rotate your head ~15° left' },
+  { label: 'Turn slightly right', detail: 'Rotate your head ~15° right' },
+  { label: 'Tilt up slightly',    detail: 'Look slightly upward' },
+  { label: 'Look straight again', detail: 'Final capture — face forward' },
 ];
 
 const removeOutlierAndAverage = (embeddings: number[][]): number[] => {
@@ -54,7 +57,6 @@ export default function EnrollScreen({ navigation }: any) {
   const isCapturingRef   = useRef(false);
   const firstPhotoUriRef = useRef<string | null>(null);
 
-  // One Animated.Value per dot — bounce on capture
   const dotAnims = useRef(
     Array.from({ length: REQUIRED_CAPTURES }, () => new Animated.Value(1))
   ).current;
@@ -96,7 +98,6 @@ export default function EnrollScreen({ navigation }: any) {
       embeddingsRef.current = [...embeddingsRef.current, result.embedding];
       const newCount = embeddingsRef.current.length;
 
-      // Persist first capture as the profile photo
       if (newCount === 1) {
         try {
           const dest = `${FileSystem.documentDirectory}profile_${Date.now()}.jpg`;
@@ -108,7 +109,6 @@ export default function EnrollScreen({ navigation }: any) {
       }
       setCaptures(newCount);
 
-      // Bounce animation on the dot just filled
       const dotIdx = newCount - 1;
       Animated.sequence([
         Animated.timing(dotAnims[dotIdx], { toValue: 1.6, duration: 120, useNativeDriver: true }),
@@ -132,7 +132,6 @@ export default function EnrollScreen({ navigation }: any) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             embeddingsRef.current = [];
             setCaptures(0);
-            // Reset dot anims
             dotAnims.forEach(a => a.setValue(1));
             setStep('camera');
             setStatus('');
@@ -170,32 +169,48 @@ export default function EnrollScreen({ navigation }: any) {
     }
   };
 
+  const resetForm = () => {
+    setName(''); setEmpId(''); setStep('form');
+    setCaptures(0); setStatus('');
+    embeddingsRef.current = [];
+    firstPhotoUriRef.current = null;
+    dotAnims.forEach(a => a.setValue(1));
+  };
+
   // ── Form ──────────────────────────────────────────────────────────────────
   if (step === 'form') return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.icon}>👤</Text>
-      <Text style={styles.title}>Register New Worker</Text>
-      <Text style={styles.subtitle}>Capture face from 5 angles for accurate recognition</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.formContent}>
+      <Text style={styles.formIcon}>👤</Text>
+      <Text style={styles.formTitle}>Register New Worker</Text>
+      <Text style={styles.formSubtitle}>Capture face from 5 angles for accurate recognition</Text>
 
       <Text style={styles.label}>Full Name</Text>
-      <TextInput style={styles.input} placeholder="e.g. Rahul Kumar"
-        placeholderTextColor="#475569" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Rahul Kumar"
+        placeholderTextColor={COLORS.textSecondary}
+        value={name}
+        onChangeText={setName}
+      />
 
       <Text style={styles.label}>Employee ID</Text>
-      <TextInput style={styles.input} placeholder="e.g. EMP001"
-        placeholderTextColor="#475569" value={empId} onChangeText={setEmpId}
-        autoCapitalize="characters" />
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. EMP001"
+        placeholderTextColor={COLORS.textSecondary}
+        value={empId}
+        onChangeText={setEmpId}
+        autoCapitalize="characters"
+      />
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>📸 5 face captures from different angles</Text>
-        <Text style={styles.infoText}>🧠 Real TFLite embeddings — MobileFaceNet INT8</Text>
-        <Text style={styles.infoText}>🔒 All data stored encrypted on-device</Text>
-        <Text style={styles.infoText}>📡 ML Kit face detection — server-free</Text>
-      </View>
+      <Card style={styles.infoBox}>
+        <Text style={styles.infoText}>📸  5 face captures from different angles</Text>
+        <Text style={styles.infoText}>🧠  Real TFLite embeddings — MobileFaceNet INT8</Text>
+        <Text style={styles.infoText}>🔒  All data stored encrypted on-device</Text>
+        <Text style={styles.infoText}>📡  ML Kit face detection — server-free</Text>
+      </Card>
 
-      <TouchableOpacity style={styles.btn} onPress={handleStartCapture}>
-        <Text style={styles.btnText}>Start Face Capture →</Text>
-      </TouchableOpacity>
+      <Button label="Start Face Capture" onPress={handleStartCapture} style={styles.startBtn} />
     </ScrollView>
   );
 
@@ -209,62 +224,57 @@ export default function EnrollScreen({ navigation }: any) {
 
     const hint = CAPTURE_HINTS[captures] ?? CAPTURE_HINTS[REQUIRED_CAPTURES - 1];
     const isProcessing = status === 'Processing...' || status === 'Detecting face...';
+    const isRetry = status === 'No face found. Try again.' || status === 'Error. Try again.';
 
     return (
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <View style={styles.cameraRoot}>
         <Camera ref={cameraRef} style={StyleSheet.absoluteFill}
           device={device} isActive={true} photo={true}
           videoStabilizationMode="auto" />
-        <View style={styles.overlay}>
-          {/* Face guide oval */}
+
+        {/* Top step indicator bar */}
+        <View style={styles.topBar}>
+          <View style={styles.stepPill}>
+            <Text style={styles.stepPillText}>Capture {Math.min(captures + 1, REQUIRED_CAPTURES)} of {REQUIRED_CAPTURES}</Text>
+          </View>
+        </View>
+
+        {/* Dashed oval face guide */}
+        <View style={styles.faceGuideWrap}>
           <View style={styles.faceGuide} />
+        </View>
 
-          {/* Angle instruction card */}
-          <View style={styles.hintCard}>
-            <Text style={styles.hintIcon}>{hint.icon}</Text>
-            <View style={styles.hintTextBlock}>
-              <Text style={styles.hintLabel}>{hint.label}</Text>
-              <Text style={styles.hintDetail}>{hint.detail}</Text>
-            </View>
-            <View style={styles.hintCounter}>
-              <Text style={styles.hintCounterNum}>{captures}</Text>
-              <Text style={styles.hintCounterOf}>/{REQUIRED_CAPTURES}</Text>
-            </View>
-          </View>
+        {/* Progress dots */}
+        <View style={styles.progressRow}>
+          {Array.from({ length: REQUIRED_CAPTURES }).map((_, i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.progressDot,
+                { backgroundColor: i < captures ? COLORS.success : i === captures ? COLORS.primary : COLORS.surfaceElevated },
+                { transform: [{ scale: dotAnims[i] }] },
+              ]}
+            />
+          ))}
+        </View>
 
-          {/* Animated progress dots */}
-          <View style={styles.progressRow}>
-            {Array.from({ length: REQUIRED_CAPTURES }).map((_, i) => (
-              <Animated.View
-                key={i}
-                style={[
-                  styles.progressDot,
-                  { backgroundColor: i < captures ? '#10b981' : i === captures ? '#3b82f6' : '#334155' },
-                  { transform: [{ scale: dotAnims[i] }] },
-                ]}
-              />
-            ))}
-          </View>
+        {/* Bottom sheet */}
+        <View style={styles.bottomSheet}>
+          <Text style={styles.hintLabel}>{hint.label}</Text>
+          <Text style={styles.hintDetail}>{hint.detail}</Text>
 
-          {/* Status text (only shown during processing) */}
-          {(isProcessing || status === 'No face found. Try again.' || status === 'Error. Try again.') ? (
-            <Text style={[
-              styles.captureHint,
-              { color: status.includes('No face') || status.includes('Error') ? '#ef4444' : '#7dd3fc' },
-            ]}>
-              {status}
-            </Text>
+          {(isProcessing || isRetry) ? (
+            <Text style={[styles.statusText, isRetry && styles.statusTextError]}>{status}</Text>
           ) : null}
 
-          {/* Capture button */}
           <TouchableOpacity
-            style={[styles.captureBtn, isProcessing && { opacity: 0.5 }]}
+            style={[styles.captureBtn, isProcessing && styles.captureBtnDisabled]}
             onPress={handleCapture}
             disabled={isProcessing}
             activeOpacity={0.8}
           >
             {isProcessing
-              ? <ActivityIndicator size="large" color="#fff" />
+              ? <ActivityIndicator size="large" color={COLORS.white} />
               : <View style={styles.captureBtnInner} />
             }
           </TouchableOpacity>
@@ -278,7 +288,7 @@ export default function EnrollScreen({ navigation }: any) {
   // ── Processing ────────────────────────────────────────────────────────────
   if (step === 'processing') return (
     <View style={styles.center}>
-      <ActivityIndicator size="large" color="#7dd3fc" />
+      <ActivityIndicator size="large" color={COLORS.primary} />
       <Text style={styles.processingText}>Processing face data...</Text>
       <Text style={styles.processingSubtext}>Averaging {REQUIRED_CAPTURES} TFLite embeddings</Text>
     </View>
@@ -287,68 +297,88 @@ export default function EnrollScreen({ navigation }: any) {
   // ── Done ──────────────────────────────────────────────────────────────────
   return (
     <View style={styles.center}>
-      <Text style={{ fontSize: 72, marginBottom: 16 }}>✅</Text>
+      <Text style={styles.doneIcon}>✅</Text>
       <Text style={styles.successText}>Worker Registered!</Text>
-      <Text style={{ color: '#f1f5f9', fontSize: 22, fontWeight: 'bold' }}>{name}</Text>
-      <Text style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>ID: {empId}</Text>
-      <Text style={{ color: '#10b981', fontSize: 13, marginTop: 12 }}>
-        ✅ Real MobileFaceNet embeddings stored
-      </Text>
-      <TouchableOpacity style={[styles.btn, { marginTop: 32, width: '80%' }]}
-        onPress={() => navigation.navigate('Home')}>
-        <Text style={styles.btnText}>Back to Home</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.btn, { marginTop: 12, width: '80%', backgroundColor: '#1e293b' }]}
-        onPress={() => {
-          setName(''); setEmpId(''); setStep('form');
-          setCaptures(0); setStatus('');
-          embeddingsRef.current = [];
-          firstPhotoUriRef.current = null;
-          dotAnims.forEach(a => a.setValue(1));
-        }}>
-        <Text style={styles.btnText}>Register Another</Text>
-      </TouchableOpacity>
+      <Text style={styles.doneName}>{name}</Text>
+      <Text style={styles.doneId}>ID: {empId}</Text>
+      <Text style={styles.doneNote}>Real MobileFaceNet embeddings stored</Text>
+
+      <Button label="Back to Home" onPress={() => navigation.navigate('Home')} style={styles.doneBtn} />
+      <Button label="Register Another" onPress={resetForm} variant="secondary" style={styles.doneBtn} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container        : { flex: 1, backgroundColor: '#0f1117' },
-  content          : { padding: 24, alignItems: 'center' },
-  center           : { flex: 1, backgroundColor: '#0f1117', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  icon             : { fontSize: 56, marginBottom: 12 },
-  title            : { fontSize: 24, fontWeight: 'bold', color: '#f1f5f9', marginBottom: 8 },
-  subtitle         : { fontSize: 13, color: '#64748b', marginBottom: 32, textAlign: 'center' },
-  label            : { alignSelf: 'flex-start', color: '#94a3b8', fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 8 },
-  input            : { width: '100%', backgroundColor: '#1e293b', borderRadius: 10, padding: 14, color: '#f1f5f9', fontSize: 15, borderWidth: 1, borderColor: '#334155', marginBottom: 8 },
-  infoBox          : { width: '100%', backgroundColor: '#1e293b', borderRadius: 10, padding: 16, marginVertical: 16, gap: 8 },
-  infoText         : { color: '#94a3b8', fontSize: 13 },
-  btn              : { width: '100%', backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
-  btnText          : { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  container   : { flex: 1, backgroundColor: COLORS.background },
+  formContent : { padding: SPACING.screen, alignItems: 'center' },
+  center      : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', padding: SPACING.screen },
 
-  overlay          : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 40 },
-  faceGuide        : { position: 'absolute', top: '8%', width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderColor: '#7dd3fc', borderStyle: 'dashed' },
+  formIcon     : { fontSize: 52, marginBottom: 12 },
+  formTitle    : { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary, marginBottom: 8 },
+  formSubtitle : { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, marginBottom: SPACING.section, textAlign: 'center' },
 
-  hintCard         : { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(2,8,23,0.88)', borderRadius: 18, padding: 14, marginBottom: 18, marginHorizontal: 16, borderWidth: 1, borderColor: '#1e293b', gap: 12, width: '90%' },
-  hintIcon         : { fontSize: 28 },
-  hintTextBlock    : { flex: 1 },
-  hintLabel        : { color: '#f1f5f9', fontSize: 15, fontWeight: '700' },
-  hintDetail       : { color: '#64748b', fontSize: 12, marginTop: 2 },
-  hintCounter      : { flexDirection: 'row', alignItems: 'baseline' },
-  hintCounterNum   : { color: '#3b82f6', fontSize: 22, fontWeight: '800' },
-  hintCounterOf    : { color: '#475569', fontSize: 14, fontWeight: '600' },
+  label : { alignSelf: 'flex-start', color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold, marginBottom: 6, marginTop: 8 },
+  input : {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.buttonSm,
+    padding: 14,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZE.base,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 8,
+  },
 
-  progressRow      : { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  progressDot      : { width: 18, height: 18, borderRadius: 9 },
+  infoBox  : { width: '100%', marginVertical: SPACING.section, gap: 10 },
+  infoText : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm },
 
-  captureHint      : { fontSize: 13, marginBottom: 16, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, textAlign: 'center' },
-  captureBtn       : { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  captureBtnInner  : { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },
-  workerLabel      : { color: '#475569', fontSize: 12 },
+  startBtn : { marginTop: 8 },
 
-  permTitle        : { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
-  processingText   : { color: '#f1f5f9', fontSize: 20, fontWeight: 'bold', marginTop: 24 },
-  processingSubtext: { color: '#64748b', fontSize: 14, marginTop: 8 },
-  successText      : { fontSize: 28, fontWeight: 'bold', color: '#10b981', marginBottom: 8 },
+  // Camera
+  cameraRoot   : { flex: 1, backgroundColor: '#000' },
+  topBar       : { position: 'absolute', top: 56, alignSelf: 'center' },
+  stepPill     : { backgroundColor: COLORS.overlay, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 8 },
+  stepPillText : { color: COLORS.textPrimary, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, letterSpacing: TRACKING.label },
+
+  faceGuideWrap : { position: 'absolute', top: '14%', alignSelf: 'center' },
+  faceGuide     : { width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderColor: COLORS.primary, borderStyle: 'dashed' },
+
+  progressRow : { position: 'absolute', bottom: 240, alignSelf: 'center', flexDirection: 'row', gap: 10 },
+  progressDot : { width: 8, height: 8, borderRadius: 4 },
+
+  bottomSheet : {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: COLORS.overlay,
+    borderTopLeftRadius: RADIUS.card,
+    borderTopRightRadius: RADIUS.card,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
+    paddingTop: SPACING.inner,
+    paddingBottom: 40,
+    alignItems: 'center',
+    gap: 6,
+  },
+  hintLabel  : { color: COLORS.textPrimary, fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold },
+  hintDetail : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm },
+  statusText      : { color: COLORS.primary, fontSize: FONT_SIZE.sm, marginTop: 4 },
+  statusTextError : { color: COLORS.error },
+
+  captureBtn      : { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: COLORS.white, alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 10 },
+  captureBtnDisabled : { opacity: 0.5 },
+  captureBtnInner : { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.white },
+  workerLabel     : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs },
+
+  permTitle : { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+
+  processingText    : { color: COLORS.textPrimary, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, marginTop: SPACING.section },
+  processingSubtext : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, marginTop: 8 },
+
+  doneIcon    : { fontSize: 64, marginBottom: 16 },
+  successText : { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, color: COLORS.success, marginBottom: 8 },
+  doneName    : { color: COLORS.textPrimary, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold },
+  doneId      : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, marginTop: 4 },
+  doneNote    : { color: COLORS.success, fontSize: FONT_SIZE.sm, marginTop: 12, marginBottom: 20 },
+  doneBtn     : { width: '80%', marginTop: 12 },
 });

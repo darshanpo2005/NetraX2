@@ -14,8 +14,13 @@ import {
   getTodayStats,
   type AttendanceRow,
 } from '../services/DatabaseService';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
+import Card from '../components/Card';
+import Button from '../components/Button';
+import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
+const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,13 +108,11 @@ function buildPdfHtml(rows: AttendanceRow[], rangeLabel: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AttendanceReportScreen() {
-  // Date range state — default: last 7 days
   const defaultTo   = endOfDay(new Date());
   const defaultFrom = startOfDay(new Date(Date.now() - 6 * 86_400_000));
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate,   setToDate]   = useState(defaultTo);
 
-  // Custom date picker modal state
   const [pickerTarget, setPickerTarget] = useState<'from' | 'to' | null>(null);
   const [pickerDay,    setPickerDay]    = useState(1);
   const [pickerMonth,  setPickerMonth]  = useState(1);
@@ -146,7 +149,6 @@ export default function AttendanceReportScreen() {
 
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Data state
   const [rows,    setRows]    = useState<AttendanceRow[]>([]);
   const [weekly,  setWeekly]  = useState<{ day: string; count: number }[]>([]);
   const [todaySt, setTodaySt] = useState({ total: 0, present: 0, absent: 0 });
@@ -180,7 +182,6 @@ export default function AttendanceReportScreen() {
 
   const applyRange = () => loadAll(fromDate, toDate);
 
-  // ── Export helpers ─────────────────────────────────────────────────────────
   const rangeLabel = `${fmtDate(fromDate)} – ${fmtDate(toDate)}`;
   const slug       = `${fromDate.toISOString().slice(0, 10)}_${toDate.toISOString().slice(0, 10)}`;
 
@@ -226,17 +227,16 @@ export default function AttendanceReportScreen() {
     finally { setBusy(null); }
   };
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const rate    = todaySt.total > 0 ? Math.round((todaySt.present / todaySt.total) * 100) : 0;
   const groups  = groupByDate(rows);
   const totals  = workerTotals(rows);
   const barData = weekly.map(d => ({ x: d.day, y: Math.max(d.count, 0) }));
 
   const summaryCards = [
-    { label: 'Enrolled',  value: todaySt.total,   icon: '👥', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.25)' },
-    { label: 'Present',   value: todaySt.present,  icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.1)',  border: 'rgba(16,185,129,0.25)' },
-    { label: 'Absent',    value: todaySt.absent,   icon: '❌', color: '#ef4444', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.25)'  },
-    { label: 'Rate',      value: `${rate}%`,       icon: '📈', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.25)' },
+    { label: 'Enrolled', value: todaySt.total,   color: COLORS.primary },
+    { label: 'Present',  value: todaySt.present, color: COLORS.success },
+    { label: 'Absent',   value: todaySt.absent,  color: COLORS.error   },
+    { label: 'Rate',     value: `${rate}%`,      color: COLORS.warning },
   ];
 
   return (
@@ -246,33 +246,29 @@ export default function AttendanceReportScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.orb1} /><View style={styles.orb2} />
-
-        {/* ── Analytics dashboard ───────────────────────────────────────── */}
+        {/* Analytics dashboard */}
         <SectionLabel title="TODAY'S OVERVIEW" />
         <View style={styles.summaryGrid}>
           {summaryCards.map(card => (
-            <View key={card.label} style={[styles.summaryCard, { backgroundColor: card.bg, borderColor: card.border }]}>
-              <Text style={styles.summaryIcon}>{card.icon}</Text>
+            <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
               <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
               <Text style={styles.summaryLabel}>{card.label}</Text>
-            </View>
+            </Card>
           ))}
         </View>
 
         <SectionLabel title="7-DAY ATTENDANCE" />
-        <View style={styles.chartCard}>
+        <Card noPadding style={styles.chartCard}>
           <BarChart data={barData} />
-        </View>
+        </Card>
 
-        {/* ── Date range picker ─────────────────────────────────────────── */}
+        {/* Date range picker */}
         <SectionLabel title="DATE RANGE" />
-        <View style={styles.dateRangeCard}>
+        <Card style={styles.dateRangeCard}>
           <View style={styles.dateRow}>
             <View style={styles.datePicker}>
               <Text style={styles.datePickerLabel}>FROM</Text>
-              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('from')} activeOpacity={0.7}>
-                <Text style={styles.dateBtnIcon}>📅</Text>
+              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('from')} activeOpacity={0.75}>
                 <Text style={styles.dateBtnText}>{fmtDate(fromDate)}</Text>
               </TouchableOpacity>
             </View>
@@ -283,22 +279,19 @@ export default function AttendanceReportScreen() {
 
             <View style={styles.datePicker}>
               <Text style={styles.datePickerLabel}>TO</Text>
-              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('to')} activeOpacity={0.7}>
-                <Text style={styles.dateBtnIcon}>📅</Text>
+              <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('to')} activeOpacity={0.75}>
                 <Text style={styles.dateBtnText}>{fmtDate(toDate)}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.applyBtn} onPress={applyRange} activeOpacity={0.8}>
-            <Text style={styles.applyBtnText}>Apply Range</Text>
-          </TouchableOpacity>
-        </View>
+          <Button label="Apply Range" onPress={applyRange} variant="secondary" style={styles.applyBtn} />
+        </Card>
 
-        {/* ── Custom date picker modal ───────────────────────────────────── */}
+        {/* Custom date picker modal */}
         <Modal visible={pickerTarget !== null} transparent animationType="fade" onRequestClose={() => setPickerTarget(null)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
+            <Card style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select {pickerTarget === 'from' ? 'From' : 'To'} Date</Text>
                 <TouchableOpacity onPress={() => setPickerTarget(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -310,31 +303,29 @@ export default function AttendanceReportScreen() {
                 <View key={field} style={styles.stepRow}>
                   <Text style={styles.stepLabel}>{field.toUpperCase()}</Text>
                   <View style={styles.stepControls}>
-                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, -1)} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, -1)} activeOpacity={0.75}>
                       <Text style={styles.stepBtnText}>‹</Text>
                     </TouchableOpacity>
                     <Text style={styles.stepValue}>
                       {field === 'month' ? MONTH_NAMES[pickerMonth - 1] : field === 'day' ? String(pickerDay).padStart(2, '0') : pickerYear}
                     </Text>
-                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, 1)} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.stepBtn} onPress={() => stepField(field, 1)} activeOpacity={0.75}>
                       <Text style={styles.stepBtnText}>›</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               ))}
 
-              <TouchableOpacity style={styles.modalConfirm} onPress={confirmPicker} activeOpacity={0.8}>
-                <Text style={styles.modalConfirmText}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
+              <Button label="Confirm" onPress={confirmPicker} style={styles.modalConfirm} />
+            </Card>
           </View>
         </Modal>
 
-        {/* ── Records section ───────────────────────────────────────────── */}
-        <SectionLabel title={`RECORDS  ·  ${rangeLabel}`} />
+        {/* Records section */}
+        <SectionLabel title={`RECORDS · ${rangeLabel}`} />
 
         {loading ? (
-          <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 40, marginBottom: 40 }} />
+          <ActivityIndicator size="large" color={COLORS.primary} style={styles.loadingSpinner} />
         ) : rows.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>📋</Text>
@@ -343,8 +334,7 @@ export default function AttendanceReportScreen() {
           </View>
         ) : (
           <>
-            {/* Summary bar */}
-            <View style={styles.summaryBar}>
+            <Card style={styles.summaryBar}>
               <View style={styles.summaryBarItem}>
                 <Text style={styles.summaryBarNum}>{rows.length}</Text>
                 <Text style={styles.summaryBarLbl}>Records</Text>
@@ -359,11 +349,10 @@ export default function AttendanceReportScreen() {
                 <Text style={styles.summaryBarNum}>{groups.length}</Text>
                 <Text style={styles.summaryBarLbl}>Days</Text>
               </View>
-            </View>
+            </Card>
 
-            {/* Per-worker totals */}
             <SectionLabel title="BY WORKER" />
-            <View style={styles.totalsCard}>
+            <Card noPadding style={styles.totalsCard}>
               {totals.map((t, i) => (
                 <View key={t.employeeId + i} style={[styles.totalRow, i < totals.length - 1 && styles.totalRowBorder]}>
                   <View style={styles.totalLeft}>
@@ -375,9 +364,8 @@ export default function AttendanceReportScreen() {
                   </View>
                 </View>
               ))}
-            </View>
+            </Card>
 
-            {/* Records grouped by date */}
             <SectionLabel title="ATTENDANCE LOG" />
             {groups.map(group => (
               <View key={group.date} style={styles.dateGroup}>
@@ -385,7 +373,7 @@ export default function AttendanceReportScreen() {
                   <Text style={styles.dateHeaderText}>{group.date}</Text>
                   <Text style={styles.dateHeaderCount}>{group.items.length} scans</Text>
                 </View>
-                <View style={styles.dateCard}>
+                <Card noPadding style={styles.dateCard}>
                   {group.items.map((r, i) => (
                     <View key={r.timestamp + i} style={[styles.recordRow, i < group.items.length - 1 && styles.recordRowBorder]}>
                       <View style={styles.recordLeft}>
@@ -398,19 +386,19 @@ export default function AttendanceReportScreen() {
                       </View>
                     </View>
                   ))}
-                </View>
+                </Card>
               </View>
             ))}
           </>
         )}
-        <View style={{ height: 100 }} />
+        <View style={styles.scrollEnd} />
       </ScrollView>
 
-      {/* ── Fixed export bar ──────────────────────────────────────────────── */}
+      {/* Fixed export bar */}
       <View style={styles.actionBar}>
-        <ExportBtn label="CSV"   icon="📊" color="#059669" busy={busy === 'csv'} onPress={handleCSV} anyBusy={!!busy} />
-        <ExportBtn label="PDF"   icon="📄" color="#dc2626" busy={busy === 'pdf'} onPress={handlePDF} anyBusy={!!busy} />
-        <ExportBtn label="Excel" icon="📧" color="#d97706" busy={busy === 'xls'} onPress={handleXLS} anyBusy={!!busy} />
+        <ExportBtn label="CSV"   color={COLORS.success} busy={busy === 'csv'} onPress={handleCSV} anyBusy={!!busy} />
+        <ExportBtn label="PDF"   color={COLORS.error}   busy={busy === 'pdf'} onPress={handlePDF} anyBusy={!!busy} />
+        <ExportBtn label="Excel" color={COLORS.warning} busy={busy === 'xls'} onPress={handleXLS} anyBusy={!!busy} />
       </View>
     </View>
   );
@@ -418,20 +406,10 @@ export default function AttendanceReportScreen() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionLabel({ title }: { title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionLine} />
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionLine} />
-    </View>
-  );
-}
-
 function ExportBtn({
-  label, icon, color, busy, anyBusy, onPress,
+  label, color, busy, anyBusy, onPress,
 }: {
-  label: string; icon: string; color: string; busy: boolean; anyBusy: boolean; onPress: () => void;
+  label: string; color: string; busy: boolean; anyBusy: boolean; onPress: () => void;
 }) {
   return (
     <TouchableOpacity
@@ -441,8 +419,8 @@ function ExportBtn({
       activeOpacity={0.8}
     >
       {busy
-        ? <ActivityIndicator size="small" color="#fff" />
-        : <><Text style={styles.actionBtnIcon}>{icon}</Text><Text style={styles.actionBtnText}>{label}</Text></>
+        ? <ActivityIndicator size="small" color={COLORS.white} />
+        : <Text style={styles.actionBtnText}>{label}</Text>
       }
     </TouchableOpacity>
   );
@@ -451,96 +429,86 @@ function ExportBtn({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root             : { flex: 1, backgroundColor: '#020817' },
-  container        : { flex: 1 },
-  content          : { padding: 16 },
-  orb1             : { position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.07 },
-  orb2             : { position: 'absolute', top: 500, left: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.05 },
-
-  sectionHeader    : { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 8 },
-  sectionLine      : { flex: 1, height: 1, backgroundColor: '#1e293b' },
-  sectionTitle     : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 2 },
+  root      : { flex: 1, backgroundColor: COLORS.background },
+  container : { flex: 1 },
+  content   : { padding: SPACING.screen },
 
   // Summary cards (2×2)
-  summaryGrid      : { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  summaryCard      : { width: (width - 42) / 2, borderRadius: 14, padding: 14, borderWidth: 1, alignItems: 'center', gap: 3 },
-  summaryIcon      : { fontSize: 20 },
-  summaryValue     : { fontSize: 26, fontWeight: '800' },
-  summaryLabel     : { fontSize: 10, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  summaryGrid  : { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.card, marginBottom: SPACING.card },
+  summaryCard  : { width: SUMMARY_CARD_WIDTH },
+  summaryValue : { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
+  summaryLabel : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.bold, textTransform: 'uppercase', letterSpacing: TRACKING.label, marginTop: 4 },
 
-  // Chart
-  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
+  chartCard : { paddingVertical: 8, marginBottom: SPACING.card },
 
   // Date range picker
-  dateRangeCard    : { backgroundColor: '#0f172a', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, gap: 14 },
-  dateRow          : { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  datePicker       : { flex: 1, gap: 6 },
-  datePickerLabel  : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
-  dateBtn          : { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1e293b', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: '#334155' },
-  dateBtnIcon      : { fontSize: 14 },
-  dateBtnText      : { color: '#93c5fd', fontSize: 13, fontWeight: '600', flex: 1 },
-  dateArrow        : { paddingTop: 18 },
-  dateArrowText    : { color: '#334155', fontSize: 18 },
-  applyBtn         : { backgroundColor: '#1e40af', borderRadius: 10, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)' },
-  applyBtnText     : { color: '#93c5fd', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  dateRangeCard   : { gap: 14, marginBottom: SPACING.card },
+  dateRow         : { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  datePicker      : { flex: 1, gap: 6 },
+  datePickerLabel : { fontSize: FONT_SIZE.xs - 1, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.bold, letterSpacing: TRACKING.caps, textTransform: 'uppercase' },
+  dateBtn         : { backgroundColor: COLORS.surfaceElevated, borderRadius: RADIUS.buttonSm, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.border },
+  dateBtnText     : { color: COLORS.textPrimary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  dateArrow       : { paddingTop: 18 },
+  dateArrowText   : { color: COLORS.textTertiary, fontSize: FONT_SIZE.lg },
+  applyBtn        : {},
 
   // Summary bar (record count row)
-  summaryBar       : { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#1e293b' },
-  summaryBarItem   : { flex: 1, alignItems: 'center' },
-  summaryBarNum    : { fontSize: 22, fontWeight: '800', color: '#3b82f6' },
-  summaryBarLbl    : { fontSize: 10, color: '#475569', marginTop: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  summaryBarDivider: { width: 1, backgroundColor: '#1e293b', marginVertical: 4 },
+  summaryBar        : { flexDirection: 'row', marginBottom: SPACING.card },
+  summaryBarItem    : { flex: 1, alignItems: 'center' },
+  summaryBarNum     : { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.primary },
+  summaryBarLbl     : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2, fontWeight: FONT_WEIGHT.semibold, textTransform: 'uppercase', letterSpacing: TRACKING.label },
+  summaryBarDivider : { width: 1, backgroundColor: COLORS.border, marginVertical: 4 },
 
   // Worker totals
-  totalsCard       : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
-  totalRow         : { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  totalRowBorder   : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  totalLeft        : { flex: 1 },
-  totalName        : { color: '#f1f5f9', fontSize: 14, fontWeight: '600' },
-  totalEmpId       : { color: '#475569', fontSize: 12, marginTop: 1 },
-  totalBadge       : { backgroundColor: 'rgba(59,130,246,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
-  totalBadgeText   : { color: '#60a5fa', fontSize: 15, fontWeight: '800' },
+  totalsCard     : { marginBottom: SPACING.card },
+  totalRow       : { flexDirection: 'row', alignItems: 'center', padding: SPACING.inner, gap: 12 },
+  totalRowBorder : { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  totalLeft      : { flex: 1 },
+  totalName      : { color: COLORS.textPrimary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  totalEmpId     : { color: COLORS.textTertiary, fontSize: FONT_SIZE.xs, marginTop: 1 },
+  totalBadge     : { backgroundColor: COLORS.primaryGlow, borderRadius: RADIUS.sm, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: COLORS.primaryBorder },
+  totalBadgeText : { color: COLORS.primary, fontSize: FONT_SIZE.base, fontWeight: FONT_WEIGHT.bold },
 
   // Date-grouped records
-  dateGroup        : { marginBottom: 14 },
-  dateHeader       : { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
-  dateHeaderText   : { color: '#64748b', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  dateHeaderCount  : { color: '#334155', fontSize: 11 },
-  dateCard         : { backgroundColor: '#0f172a', borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
-  recordRow        : { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
-  recordRowBorder  : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  recordLeft       : { flex: 1 },
-  recordName       : { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
-  recordEmpId      : { color: '#475569', fontSize: 12, marginTop: 1 },
-  recordRight      : { alignItems: 'flex-end', gap: 2 },
-  recordTime       : { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
-  recordDay        : { color: '#334155', fontSize: 11 },
+  dateGroup       : { marginBottom: SPACING.card },
+  dateHeader      : { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
+  dateHeaderText  : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, letterSpacing: TRACKING.label },
+  dateHeaderCount : { color: COLORS.textTertiary, fontSize: FONT_SIZE.xs - 1 },
+  dateCard        : {},
+  recordRow       : { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  recordRowBorder : { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  recordLeft      : { flex: 1 },
+  recordName      : { color: COLORS.textPrimary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  recordEmpId     : { color: COLORS.textTertiary, fontSize: FONT_SIZE.xs, marginTop: 1 },
+  recordRight     : { alignItems: 'flex-end', gap: 2 },
+  recordTime      : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.semibold },
+  recordDay       : { color: COLORS.textTertiary, fontSize: FONT_SIZE.xs - 1 },
 
   // Empty
-  empty            : { alignItems: 'center', marginTop: 60, marginBottom: 40, gap: 10 },
-  emptyIcon        : { fontSize: 48 },
-  emptyText        : { color: '#94a3b8', fontSize: 18, fontWeight: '700' },
-  emptySubText     : { color: '#475569', fontSize: 13, textAlign: 'center' },
+  loadingSpinner : { marginTop: 40, marginBottom: 40 },
+  empty          : { alignItems: 'center', marginTop: 60, marginBottom: 40, gap: 10 },
+  emptyIcon      : { fontSize: 44 },
+  emptyText      : { color: COLORS.textPrimary, fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  emptySubText   : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, textAlign: 'center' },
+  scrollEnd      : { height: 100 },
 
   // Modal date picker
-  modalOverlay     : { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modalCard        : { width: '100%', backgroundColor: '#0f172a', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#1e293b', gap: 16 },
+  modalOverlay     : { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: SPACING.screen },
+  modalCard        : { width: '100%', gap: 16 },
   modalHeader      : { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  modalTitle       : { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
-  modalClose       : { color: '#475569', fontSize: 20, fontWeight: '600' },
-  stepRow          : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1e293b', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  stepLabel        : { color: '#475569', fontSize: 11, fontWeight: '700', letterSpacing: 1.5, width: 48 },
+  modalTitle       : { color: COLORS.textPrimary, fontSize: FONT_SIZE.base, fontWeight: FONT_WEIGHT.bold },
+  modalClose       : { color: COLORS.textSecondary, fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.semibold },
+  stepRow          : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.surfaceElevated, borderRadius: RADIUS.buttonSm, paddingHorizontal: 16, paddingVertical: 12 },
+  stepLabel        : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, letterSpacing: TRACKING.caps, width: 48 },
   stepControls     : { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  stepBtn          : { width: 36, height: 36, backgroundColor: '#0f172a', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#334155' },
-  stepBtnText      : { color: '#93c5fd', fontSize: 22, fontWeight: '300', lineHeight: 28 },
-  stepValue        : { color: '#f1f5f9', fontSize: 18, fontWeight: '700', minWidth: 64, textAlign: 'center' },
-  modalConfirm     : { backgroundColor: '#1e40af', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)' },
-  modalConfirmText : { color: '#93c5fd', fontSize: 15, fontWeight: '700' },
+  stepBtn          : { width: 36, height: 36, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border },
+  stepBtnText      : { color: COLORS.primary, fontSize: 22, fontWeight: FONT_WEIGHT.light, lineHeight: 28 },
+  stepValue        : { color: COLORS.textPrimary, fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold, minWidth: 64, textAlign: 'center' },
+  modalConfirm     : { marginTop: 4 },
 
   // Export bar
-  actionBar        : { flexDirection: 'row', gap: 10, padding: 12, paddingBottom: 20, backgroundColor: '#020817', borderTopWidth: 1, borderTopColor: '#1e293b' },
-  actionBtn        : { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 14 },
-  actionBtnBusy    : { opacity: 0.5 },
-  actionBtnIcon    : { fontSize: 17 },
-  actionBtnText    : { color: '#fff', fontSize: 14, fontWeight: '700' },
+  actionBar     : { flexDirection: 'row', gap: SPACING.card, padding: 12, paddingBottom: 20, backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: COLORS.border },
+  actionBtn     : { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: RADIUS.buttonSm },
+  actionBtnBusy : { opacity: 0.5 },
+  actionBtnText : { color: COLORS.white, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
 });

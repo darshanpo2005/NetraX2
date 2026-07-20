@@ -13,8 +13,12 @@ import {
   type DayCount,
   type WorkerStreak,
 } from '../services/DatabaseService';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
+import Card from '../components/Card';
+import SectionLabel from '../components/SectionLabel';
 
 const { width } = Dimensions.get('window');
+const SUMMARY_CARD_WIDTH = (width - SPACING.screen * 2 - SPACING.card) / 2;
 
 export default function DashboardScreen() {
   const [loading, setLoading]       = useState(true);
@@ -55,10 +59,10 @@ export default function DashboardScreen() {
   const rate   = totalWorkers > 0 ? Math.round((presentCount / totalWorkers) * 100) : 0;
 
   const summaryCards = [
-    { label: 'Enrolled',    value: totalWorkers,  icon: '👥', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)',   border: 'rgba(59,130,246,0.25)' },
-    { label: 'Present',     value: presentCount,  icon: '✅', color: '#10b981', bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.25)' },
-    { label: 'Absent',      value: absent,        icon: '❌', color: '#ef4444', bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.25)'  },
-    { label: 'Rate',        value: `${rate}%`,    icon: '📈', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',   border: 'rgba(245,158,11,0.25)' },
+    { label: 'Enrolled', value: totalWorkers, color: COLORS.primary },
+    { label: 'Present',  value: presentCount,  color: COLORS.success },
+    { label: 'Absent',   value: absent,        color: COLORS.error   },
+    { label: 'Rate',     value: `${rate}%`,    color: COLORS.warning },
   ];
 
   const barData = weekData.map(d => ({ x: d.label, y: Math.max(d.count, 0) }));
@@ -71,7 +75,7 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading dashboard…</Text>
       </View>
     );
@@ -81,13 +85,9 @@ export default function DashboardScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#3b82f6" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
       showsVerticalScrollIndicator={false}
     >
-      {/* Background orbs */}
-      <View style={styles.orb1} />
-      <View style={styles.orb2} />
-
       {/* Date header */}
       <View style={styles.dateRow}>
         <Text style={styles.dateLabel}>
@@ -99,30 +99,26 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── Summary cards ─────────────────────────────────────────────────── */}
+      {/* Summary cards */}
       <SectionLabel title="TODAY'S OVERVIEW" />
       <View style={styles.summaryGrid}>
         {summaryCards.map(card => (
-          <View
-            key={card.label}
-            style={[styles.summaryCard, { backgroundColor: card.bg, borderColor: card.border }]}
-          >
-            <Text style={styles.summaryIcon}>{card.icon}</Text>
+          <Card key={card.label} accentColor={card.color} style={styles.summaryCard}>
             <Text style={[styles.summaryValue, { color: card.color }]}>{card.value}</Text>
             <Text style={styles.summaryLabel}>{card.label}</Text>
-          </View>
+          </Card>
         ))}
       </View>
 
-      {/* ── Weekly bar chart ───────────────────────────────────────────────── */}
+      {/* Weekly bar chart */}
       <SectionLabel title="7-DAY ATTENDANCE" />
-      <View style={styles.chartCard}>
+      <Card noPadding style={styles.chartCard}>
         <BarChart data={barData} />
-      </View>
+      </Card>
 
-      {/* ── Worker attendance list ─────────────────────────────────────────── */}
-      <SectionLabel title={`WORKFORCE  ·  ${streaks.length} workers`} />
-      <View style={styles.listCard}>
+      {/* Worker attendance list */}
+      <SectionLabel title={`WORKFORCE · ${streaks.length} workers`} />
+      <Card noPadding style={styles.listCard}>
         {streaks.length === 0 ? (
           <Text style={styles.emptyText}>No workers enrolled yet.</Text>
         ) : (
@@ -131,7 +127,6 @@ export default function DashboardScreen() {
               key={w.workerId}
               style={[styles.workerRow, i < streaks.length - 1 && styles.workerRowBorder]}
             >
-              {/* Avatar or initials */}
               {w.photoUri ? (
                 <Image source={{ uri: w.photoUri }} style={styles.workerPhoto} />
               ) : (
@@ -140,10 +135,8 @@ export default function DashboardScreen() {
                 </View>
               )}
 
-              {/* Status dot */}
-              <View style={[styles.statusDot, { backgroundColor: w.presentToday ? '#10b981' : '#ef4444' }]} />
+              <View style={[styles.statusDot, { backgroundColor: w.presentToday ? COLORS.success : COLORS.error }]} />
 
-              {/* Name + last seen */}
               <View style={styles.workerInfo}>
                 <Text style={styles.workerName}>{w.workerName}</Text>
                 <Text style={styles.workerSub}>
@@ -155,78 +148,58 @@ export default function DashboardScreen() {
                 </Text>
               </View>
 
-              {/* Streak badge */}
               <View style={[styles.streakBadge, w.streak > 0 ? styles.streakActive : styles.streakZero]}>
-                <Text style={styles.streakIcon}>🔥</Text>
-                <Text style={[styles.streakText, w.streak > 0 ? { color: '#f59e0b' } : { color: '#475569' }]}>
+                <Text style={[styles.streakText, { color: w.streak > 0 ? COLORS.warning : COLORS.textTertiary }]}>
                   {w.streak}d
                 </Text>
               </View>
             </View>
           ))
         )}
-      </View>
+      </Card>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Pull down to refresh  ·  Data from on-device SQLite</Text>
+        <Text style={styles.footerText}>PULL DOWN TO REFRESH · DATA FROM ON-DEVICE SQLITE</Text>
       </View>
     </ScrollView>
   );
 }
 
-function SectionLabel({ title }: { title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionLine} />
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionLine} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container        : { flex: 1, backgroundColor: '#020817' },
-  content          : { padding: 20, paddingBottom: 48 },
-  loadingContainer : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', gap: 16 },
-  loadingText      : { color: '#475569', fontSize: 14 },
-  orb1             : { position: 'absolute', top: 0, right: -60, width: 250, height: 250, borderRadius: 125, backgroundColor: '#1e40af', opacity: 0.07 },
-  orb2             : { position: 'absolute', top: 380, left: -80, width: 200, height: 200, borderRadius: 100, backgroundColor: '#6d28d9', opacity: 0.05 },
+  container        : { flex: 1, backgroundColor: COLORS.background },
+  content          : { padding: SPACING.screen, paddingBottom: 48 },
+  loadingContainer : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  loadingText      : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm },
 
-  dateRow          : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  dateLabel        : { fontSize: 15, color: '#94a3b8', fontWeight: '600' },
-  liveBadge        : { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(16,185,129,0.1)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(16,185,129,0.25)' },
-  liveDot          : { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
-  liveText         : { color: '#10b981', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  dateRow   : { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.section },
+  dateLabel : { fontSize: FONT_SIZE.base, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold },
+  liveBadge : { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: COLORS.successGlow, borderRadius: RADIUS.sm, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: COLORS.successBorder },
+  liveDot   : { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.success },
+  liveText  : { color: COLORS.success, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, letterSpacing: TRACKING.label },
 
-  sectionHeader    : { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 8 },
-  sectionLine      : { flex: 1, height: 1, backgroundColor: '#1e293b' },
-  sectionTitle     : { fontSize: 10, color: '#475569', fontWeight: '700', letterSpacing: 2 },
+  summaryGrid  : { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.card, marginBottom: SPACING.card },
+  summaryCard  : { width: SUMMARY_CARD_WIDTH },
+  summaryValue : { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold },
+  summaryLabel : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold, textTransform: 'uppercase', letterSpacing: TRACKING.label, marginTop: 4 },
 
-  summaryGrid      : { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  summaryCard      : { width: (width - 50) / 2, borderRadius: 16, padding: 16, borderWidth: 1, alignItems: 'center', gap: 4 },
-  summaryIcon      : { fontSize: 22 },
-  summaryValue     : { fontSize: 28, fontWeight: '800' },
-  summaryLabel     : { fontSize: 11, color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  chartCard : { paddingVertical: 8, marginBottom: SPACING.card },
 
-  chartCard        : { backgroundColor: '#0f172a', borderRadius: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
+  listCard        : { marginBottom: SPACING.card },
+  emptyText       : { color: COLORS.textSecondary, textAlign: 'center', padding: SPACING.section, fontSize: FONT_SIZE.sm },
+  workerRow       : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.inner, paddingVertical: 14, gap: 8 },
+  workerRowBorder : { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  workerPhoto     : { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: COLORS.primary },
+  workerInitials  : { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primaryDim, borderWidth: 1, borderColor: COLORS.primaryBorder, alignItems: 'center', justifyContent: 'center' },
+  workerInitialsText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  statusDot       : { width: 8, height: 8, borderRadius: 4 },
+  workerInfo      : { flex: 1, gap: 2 },
+  workerName      : { fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  workerSub       : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary },
+  streakBadge     : { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.sm, borderWidth: 1 },
+  streakActive    : { backgroundColor: COLORS.warningGlow, borderColor: COLORS.warningBorder },
+  streakZero      : { backgroundColor: 'rgba(100,116,139,0.08)', borderColor: COLORS.border },
+  streakText      : { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold },
 
-  listCard         : { backgroundColor: '#0f172a', borderRadius: 16, borderWidth: 1, borderColor: '#1e293b', marginBottom: 8, overflow: 'hidden' },
-  emptyText        : { color: '#475569', textAlign: 'center', padding: 24, fontSize: 13 },
-  workerRow        : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
-  workerRowBorder  : { borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  workerPhoto      : { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: '#3b82f6' },
-  workerInitials   : { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)', alignItems: 'center', justifyContent: 'center' },
-  workerInitialsText: { color: '#60a5fa', fontSize: 14, fontWeight: '700' },
-  statusDot        : { width: 8, height: 8, borderRadius: 4 },
-  workerInfo       : { flex: 1, gap: 2 },
-  workerName       : { fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
-  workerSub        : { fontSize: 12, color: '#475569' },
-  streakBadge      : { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
-  streakActive     : { backgroundColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.25)' },
-  streakZero       : { backgroundColor: 'rgba(71,85,105,0.1)', borderColor: '#1e293b' },
-  streakIcon       : { fontSize: 12 },
-  streakText       : { fontSize: 12, fontWeight: '700' },
-
-  footer           : { alignItems: 'center', marginTop: 12 },
-  footerText       : { color: '#1e293b', fontSize: 11, letterSpacing: 0.5 },
+  footer     : { alignItems: 'center', marginTop: 12 },
+  footerText : { color: COLORS.textTertiary, fontSize: FONT_SIZE.xs - 1, letterSpacing: TRACKING.label },
 });

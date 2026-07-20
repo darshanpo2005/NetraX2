@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { COLORS, FONT_SIZE, FONT_WEIGHT } from '../theme';
 
 interface BarDatum { x: string; y: number }
 
@@ -10,7 +11,7 @@ interface Props {
 }
 
 // Pure-View bar chart — zero external dependencies.
-export default function BarChart({ data, barColor = '#3b82f6', maxBarHeight = 120 }: Props) {
+export default function BarChart({ data, barColor = COLORS.primary, maxBarHeight = 120 }: Props) {
   const maxY = Math.max(...data.map(d => d.y), 1);
 
   return (
@@ -33,6 +34,6 @@ const styles = StyleSheet.create({
   container  : { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingBottom: 8, paddingTop: 28 },
   column     : { flex: 1, alignItems: 'center', gap: 5 },
   bar        : { width: 24, borderRadius: 4 },
-  valueLabel : { fontSize: 10, color: '#93c5fd', fontWeight: '600', height: 14 },
-  xLabel     : { fontSize: 11, color: '#64748b', marginTop: 5 },
+  valueLabel : { fontSize: 10, color: COLORS.primary, fontWeight: FONT_WEIGHT.semibold, height: 14 },
+  xLabel     : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 5 },
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity,
+  View, Text,
   StyleSheet, ActivityIndicator, Animated, Image,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
@@ -9,8 +9,10 @@ import * as Haptics from 'expo-haptics';
 import { getAllWorkers, logAttendance } from '../services/DatabaseService';
 import { findBestMatch, l2Normalize, COSINE_THRESHOLD } from '../services/FaceService';
 import { extractFaceEmbedding } from '../services/FaceRecognitionService';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
+import Button from '../components/Button';
 
-const CHALLENGE     = { text: 'Blink your eyes', emoji: '😉', instruction: 'Blink slowly once' };
+const CHALLENGE     = { text: 'Blink your eyes', instruction: 'Blink slowly once' };
 const LIVENESS_SECS = 12;
 
 type ScanStep = 'liveness' | 'scanning' | 'result';
@@ -54,13 +56,11 @@ export default function AttendanceScreen({ navigation }: any) {
       resultShakeAnim.setValue(0);
       return;
     }
-    // Fade + slide up entrance for all results
     Animated.timing(resultFadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
     if (result.type === 'success') {
       Animated.spring(resultScaleAnim, { toValue: 1, useNativeDriver: true }).start();
     } else {
       resultScaleAnim.setValue(1);
-      // Shake after entrance
       const t = setTimeout(() => {
         Animated.sequence([
           Animated.timing(resultShakeAnim, { toValue: -12, duration: 55, useNativeDriver: true }),
@@ -79,10 +79,23 @@ export default function AttendanceScreen({ navigation }: any) {
   const pulseAnim     = useRef(new Animated.Value(0)).current;
   const pulseLoopRef  = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Eye-blink hint animation — loops to show the user what "blink" looks like.
+  const eyeBlinkAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(1400),
+        Animated.timing(eyeBlinkAnim, { toValue: 0.1, duration: 90, useNativeDriver: false }),
+        Animated.timing(eyeBlinkAnim, { toValue: 1,   duration: 140, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
 
-  // Animate oval colour whenever face detection or pass state changes
   useEffect(() => {
     Animated.timing(ovalColorAnim, {
       toValue       : faceDetected || livenessPassed ? 1 : 0,
@@ -93,7 +106,7 @@ export default function AttendanceScreen({ navigation }: any) {
 
   const ovalBorderColor = ovalColorAnim.interpolate({
     inputRange : [0, 1],
-    outputRange: ['#3b82f6', '#10b981'],
+    outputRange: [COLORS.primary, COLORS.success],
   });
   const ringScale = pulseAnim.interpolate({
     inputRange : [0, 1],
@@ -163,7 +176,6 @@ export default function AttendanceScreen({ navigation }: any) {
           location  : 'Field Site',
         });
         const matchedWorker = workers.find(w => w.id === match.workerId);
-        const timeStr = new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setResult({
           type: 'success', name: match.workerName!, sim: match.similarity,
@@ -234,7 +246,6 @@ export default function AttendanceScreen({ navigation }: any) {
           stopAllRef.current();
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          // Track this timeout so retry can cancel it if tapped quickly
           recognitionTimeoutRef.current = setTimeout(() => handleRecognitionRef.current(), 600);
         } else {
           setLiveFeedback('Blink slowly once');
@@ -253,15 +264,12 @@ export default function AttendanceScreen({ navigation }: any) {
   checkLivenessFrameRef.current = checkLivenessFrame;
 
   // ─── Start liveness session ───────────────────────────────────────────────
-  // Extracted so both initial mount and handleRetry use the same logic.
   const startLiveness = useCallback(() => {
-    // Reset liveness refs
     eyesWereOpenRef.current      = false;
     minEyeSeenRef.current        = 1.0;
     livenessPassedRef.current    = false;
     captureInProgressRef.current = false;
 
-    // Restart pulse animation
     pulseLoopRef.current?.stop();
     pulseAnim.setValue(0);
     pulseLoopRef.current = Animated.loop(
@@ -269,7 +277,6 @@ export default function AttendanceScreen({ navigation }: any) {
     );
     pulseLoopRef.current.start();
 
-    // Start countdown timer
     let t = LIVENESS_SECS;
     timerRef.current = setInterval(() => {
       t--;
@@ -283,16 +290,13 @@ export default function AttendanceScreen({ navigation }: any) {
       }
     }, 1000);
 
-    // Start liveness frame capture loop
     captureRef.current = setInterval(() => checkLivenessFrameRef.current(), 80);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Try Again ────────────────────────────────────────────────────────────
   const handleRetry = useCallback(() => {
-    // Cancel everything currently running
     stopAllRef.current();
 
-    // Reset all state
     setResult(null);
     setStep('liveness');
     setTimeLeft(LIVENESS_SECS);
@@ -302,10 +306,8 @@ export default function AttendanceScreen({ navigation }: any) {
     setDebugInfo('');
     setStatusMsg('');
 
-    // Reset oval colour animation
     ovalColorAnim.setValue(0);
 
-    // Restart liveness session (resets refs + starts intervals)
     startLiveness();
   }, [startLiveness]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -322,9 +324,7 @@ export default function AttendanceScreen({ navigation }: any) {
       <Text style={styles.permIcon}>📷</Text>
       <Text style={styles.permTitle}>Camera Access Required</Text>
       <Text style={styles.permSub}>Face recognition requires camera permission</Text>
-      <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
-        <Text style={styles.permBtnText}>Grant Permission</Text>
-      </TouchableOpacity>
+      <Button label="Grant Permission" onPress={requestPermission} style={styles.permBtn} />
     </View>
   );
 
@@ -336,8 +336,8 @@ export default function AttendanceScreen({ navigation }: any) {
 
   // ─── Liveness step ────────────────────────────────────────────────────────
   if (step === 'liveness') {
-    const timerPct  = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
-    const timerColor = timeLeft <= 3 ? '#ef4444' : timeLeft <= 6 ? '#f59e0b' : '#3b82f6';
+    const timerPct   = `${(timeLeft / LIVENESS_SECS) * 100}%` as any;
+    const timerColor = timeLeft <= 3 ? COLORS.error : timeLeft <= 6 ? COLORS.warning : COLORS.primary;
 
     return (
       <View style={styles.cameraContainer}>
@@ -345,22 +345,21 @@ export default function AttendanceScreen({ navigation }: any) {
           device={device} isActive={true} photo={true}
           videoStabilizationMode="auto" />
         <View style={styles.dimOverlay} />
-        <View style={styles.brightOverlay} />
 
         {/* Face oval + pulse ring */}
         <View style={styles.faceOvalContainer}>
-          <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <View style={styles.faceOvalCenter}>
             {!livenessPassed && (
               <Animated.View style={[
                 styles.pulseRing,
                 { transform: [{ scale: ringScale }], opacity: ringOpacity,
-                  borderColor: faceDetected ? '#10b981' : '#3b82f6' },
+                  borderColor: faceDetected ? COLORS.success : COLORS.primary },
               ]} />
             )}
             <Animated.View style={[
               styles.faceOval,
               { borderColor: ovalBorderColor },
-              livenessPassed && { borderStyle: 'solid' },
+              livenessPassed && styles.faceOvalSolid,
             ]} />
             {livenessPassed && (
               <View style={styles.passedBadge}>
@@ -368,47 +367,51 @@ export default function AttendanceScreen({ navigation }: any) {
               </View>
             )}
           </View>
-          <View style={[styles.faceStatusPill, {
-            backgroundColor: livenessPassed ? 'rgba(16,185,129,0.15)' :
-                              faceDetected   ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-            borderColor: livenessPassed ? 'rgba(16,185,129,0.4)' :
-                         faceDetected   ? 'rgba(16,185,129,0.4)'  : 'rgba(239,68,68,0.4)',
-          }]}>
-            <Text style={[styles.faceStatusText, {
-              color: livenessPassed ? '#10b981' : faceDetected ? '#10b981' : '#ef4444',
-            }]}>
+          <View style={[
+            styles.faceStatusPill,
+            { backgroundColor: (livenessPassed || faceDetected) ? COLORS.successGlow : COLORS.errorGlow,
+              borderColor: (livenessPassed || faceDetected) ? COLORS.successBorder : COLORS.errorBorder },
+          ]}>
+            <Text style={[styles.faceStatusText, { color: (livenessPassed || faceDetected) ? COLORS.success : COLORS.error }]}>
               {livenessPassed ? '✓ Liveness verified' : faceDetected ? 'Face detected ✓' : 'No face found'}
             </Text>
           </View>
         </View>
 
-        {/* Challenge card */}
-        <View style={styles.challengeCard}>
+        {/* Bottom sheet — liveness instruction */}
+        <View style={styles.bottomSheet}>
           <View style={styles.timerRow}>
-            <View style={[styles.timerBar, { width: timerPct, backgroundColor: livenessPassed ? '#10b981' : timerColor }]} />
+            <View style={[styles.timerBar, { width: timerPct, backgroundColor: livenessPassed ? COLORS.success : timerColor }]} />
           </View>
 
           <View style={styles.challengeContent}>
-            <Text style={styles.challengeEmoji}>{livenessPassed ? '✅' : CHALLENGE.emoji}</Text>
+            {/* Eye animation indicator */}
+            <View style={styles.eyeIndicator}>
+              <Animated.View style={[styles.eye, { transform: [{ scaleY: eyeBlinkAnim }] }]} />
+              <Animated.View style={[styles.eye, { transform: [{ scaleY: eyeBlinkAnim }] }]} />
+            </View>
+
             <View style={styles.challengeText}>
-              <Text style={styles.challengeTitle}>{CHALLENGE.text}</Text>
-              <Text style={[styles.liveFeedbackText, livenessPassed && { color: '#10b981' }]}>
+              <Text style={styles.challengeTitle}>{livenessPassed ? 'Verified' : CHALLENGE.text}</Text>
+              <Text style={[styles.liveFeedbackText, livenessPassed && styles.liveFeedbackSuccess]}>
                 {liveFeedback}
               </Text>
               {debugInfo ? <Text style={styles.debugInfoText}>{debugInfo}</Text> : null}
             </View>
-            <View style={[styles.challengeTimer, {
-              borderColor    : livenessPassed ? 'rgba(16,185,129,0.3)' : `${timerColor}44`,
-              backgroundColor: livenessPassed ? 'rgba(16,185,129,0.15)' : `${timerColor}18`,
-            }]}>
-              <Text style={[styles.timerNum, { color: livenessPassed ? '#10b981' : timerColor }]}>
+
+            <View style={[
+              styles.challengeTimer,
+              { borderColor: livenessPassed ? COLORS.successBorder : `${timerColor}55`,
+                backgroundColor: livenessPassed ? COLORS.successGlow : `${timerColor}18` },
+            ]}>
+              <Text style={[styles.timerNum, { color: livenessPassed ? COLORS.success : timerColor }]}>
                 {livenessPassed ? '✓' : timeLeft}
               </Text>
               {!livenessPassed && <Text style={[styles.timerSec, { color: timerColor }]}>s</Text>}
             </View>
           </View>
 
-          <Text style={styles.livenessLabel}>🛡️ Anti-Spoofing Check — Automatic</Text>
+          <Text style={styles.livenessLabel}>ANTI-SPOOFING CHECK · AUTOMATIC</Text>
         </View>
       </View>
     );
@@ -421,11 +424,9 @@ export default function AttendanceScreen({ navigation }: any) {
         device={device} isActive={true} photo={true}
         videoStabilizationMode="auto" />
       <View style={styles.dimOverlay} />
-      <View style={styles.brightOverlay} />
       <View style={styles.scanningOverlay}>
-        <View style={[styles.faceOval, { borderColor: '#f59e0b', borderStyle: 'dashed' }]} />
-        <View style={styles.scanLine} />
-        <ActivityIndicator size="large" color="#f59e0b" style={{ marginTop: 24 }} />
+        <View style={[styles.faceOval, styles.faceOvalScanning]} />
+        <ActivityIndicator size="large" color={COLORS.warning} style={styles.scanSpinner} />
         <View style={styles.scanStatusCard}>
           <Text style={styles.scanStatusText}>{statusMsg}</Text>
         </View>
@@ -437,40 +438,37 @@ export default function AttendanceScreen({ navigation }: any) {
   if (step === 'result' && result) {
     const isSuccess = result.type === 'success';
     const isWarn    = result.type === 'no_match';
-    const cardBg    = isSuccess ? '#052e1e' : isWarn ? '#2d1a00' : '#2d0a0a';
-    const cardBorder = isSuccess ? 'rgba(74,222,128,0.25)' : isWarn ? 'rgba(251,191,36,0.25)' : 'rgba(248,113,113,0.25)';
-    const accentColor = isSuccess ? '#4ade80' : isWarn ? '#fbbf24' : '#f87171';
+    const accentColor = isSuccess ? COLORS.success : isWarn ? COLORS.warning : COLORS.error;
+    const cardGlow     = isSuccess ? COLORS.successGlow : isWarn ? COLORS.warningGlow : COLORS.errorGlow;
+    const cardBorder   = isSuccess ? COLORS.successBorder : isWarn ? COLORS.warningBorder : COLORS.errorBorder;
 
     return (
       <View style={styles.resultContainer}>
-        <View style={styles.orb1} /><View style={styles.orb2} />
-
-        <Animated.View style={[{ width: '100%' }, {
+        <Animated.View style={[styles.resultAnimWrap, {
           opacity: resultFadeAnim,
           transform: [{ scale: resultScaleAnim }, { translateX: resultShakeAnim }],
         }]}>
-          <View style={[styles.resultCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <View style={[styles.resultCard, { backgroundColor: cardGlow, borderColor: cardBorder }]}>
             {isSuccess ? (
               <>
-                <Text style={styles.confetti}>🎉  🎊  🎉</Text>
                 {result.photoUri ? (
                   <Image source={{ uri: result.photoUri }} style={styles.successPhoto} />
                 ) : (
                   <View style={styles.successAvatarPlaceholder}>
-                    <Text style={{ fontSize: 52 }}>👤</Text>
+                    <Text style={styles.successAvatarText}>👤</Text>
                   </View>
                 )}
                 <Text style={styles.workerName}>{result.name}</Text>
                 <Text style={[styles.resultTitle, { color: accentColor }]}>{result.message}</Text>
                 <View style={styles.simContainer}>
-                  <Text style={styles.simLabel}>Match Confidence</Text>
+                  <Text style={styles.simLabel}>MATCH CONFIDENCE</Text>
                   <View style={styles.simBar}>
-                    <View style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any, backgroundColor: '#4ade80' }]} />
+                    <View style={[styles.simFill, { width: `${Math.min((result.sim || 0) * 100, 100)}%` as any }]} />
                   </View>
                   <Text style={[styles.simValue, { color: accentColor }]}>{((result.sim || 0) * 100).toFixed(1)}%</Text>
                 </View>
                 <View style={styles.successPill}>
-                  <Text style={styles.successPillText}>✓ Attendance Recorded  ·  {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <Text style={styles.successPillText}>✓ Attendance Recorded · {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
               </>
             ) : (
@@ -505,25 +503,16 @@ export default function AttendanceScreen({ navigation }: any) {
                     </>
                   )}
                 </View>
-                {/* Retry inside fail card */}
-                <TouchableOpacity onPress={handleRetry} activeOpacity={0.8} style={{ width: '100%', marginTop: 4 }}>
-                  <View style={styles.retryBtnInner}>
-                    <Text style={styles.retryBtnText}>↺  Try Again</Text>
-                  </View>
-                </TouchableOpacity>
+                <Button label="Try Again" onPress={handleRetry} style={styles.retryBtnInline} />
               </>
             )}
           </View>
         </Animated.View>
 
         {isSuccess && (
-          <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
-            <Text style={styles.retryBtnText}>↺  Scan Another</Text>
-          </TouchableOpacity>
+          <Button label="Scan Another" onPress={handleRetry} style={styles.actionSpacing} />
         )}
-        <TouchableOpacity style={styles.homeBtn} onPress={() => navigation.navigate('Home')} activeOpacity={0.8}>
-          <Text style={styles.homeBtnText}>Back to Home</Text>
-        </TouchableOpacity>
+        <Button label="Back to Home" onPress={() => navigation.navigate('Home')} variant="secondary" style={styles.actionSpacing} />
       </View>
     );
   }
@@ -533,67 +522,78 @@ export default function AttendanceScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   cameraContainer  : { flex: 1, backgroundColor: '#000' },
-  dimOverlay       : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)' },
-  brightOverlay    : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.05)', pointerEvents: 'none' },
+  dimOverlay       : { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
 
   faceOvalContainer: { position: 'absolute', top: '8%', alignSelf: 'center', alignItems: 'center', gap: 12 },
-  pulseRing        : { position: 'absolute', width: 220, height: 290, borderRadius: 110, borderWidth: 2, borderColor: '#3b82f6' },
-  faceOval         : { width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderStyle: 'dashed', borderColor: '#3b82f6' },
-  passedBadge      : { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(16,185,129,0.9)', alignItems: 'center', justifyContent: 'center' },
-  passedBadgeText  : { fontSize: 36, color: '#fff' },
-  faceStatusPill   : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  faceStatusText   : { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  faceOvalCenter   : { alignItems: 'center', justifyContent: 'center' },
+  pulseRing        : { position: 'absolute', width: 220, height: 290, borderRadius: 110, borderWidth: 2 },
+  faceOval         : { width: 220, height: 290, borderRadius: 110, borderWidth: 2.5, borderStyle: 'dashed', borderColor: COLORS.primary },
+  faceOvalSolid    : { borderStyle: 'solid' },
+  faceOvalScanning : { borderColor: COLORS.warning, borderStyle: 'dashed' },
+  passedBadge      : { position: 'absolute', width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center' },
+  passedBadgeText  : { fontSize: 36, color: COLORS.white },
+  faceStatusPill   : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADIUS.pill, borderWidth: 1 },
+  faceStatusText   : { fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, letterSpacing: TRACKING.label },
 
-  challengeCard    : { position: 'absolute', bottom: 48, left: 16, right: 16, backgroundColor: 'rgba(2,8,23,0.92)', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#1e293b', gap: 12 },
-  timerRow         : { height: 3, backgroundColor: '#1e293b', borderRadius: 2, overflow: 'hidden' },
+  bottomSheet      : {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: COLORS.overlay,
+    borderTopLeftRadius: RADIUS.card,
+    borderTopRightRadius: RADIUS.card,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.inner,
+    paddingBottom: 40,
+    gap: 14,
+  },
+  timerRow         : { height: 3, backgroundColor: COLORS.surfaceElevated, borderRadius: 2, overflow: 'hidden' },
   timerBar         : { height: '100%', borderRadius: 2 },
   challengeContent : { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  challengeEmoji   : { fontSize: 36 },
+
+  eyeIndicator     : { flexDirection: 'row', gap: 6, width: 36 },
+  eye              : { width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.primary },
+
   challengeText    : { flex: 1, gap: 4 },
-  challengeTitle   : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },
-  liveFeedbackText : { fontSize: 12, color: '#94a3b8' },
-  debugInfoText    : { fontSize: 10, color: '#475569' },
+  challengeTitle   : { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.semibold, color: COLORS.textPrimary },
+  liveFeedbackText : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary },
+  liveFeedbackSuccess: { color: COLORS.success },
+  debugInfoText    : { fontSize: 10, color: COLORS.textTertiary },
   challengeTimer   : { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  timerNum         : { fontSize: 17, fontWeight: '800', lineHeight: 20 },
-  timerSec         : { fontSize: 9, fontWeight: '600', lineHeight: 10 },
-  livenessLabel    : { fontSize: 11, color: '#334155', textAlign: 'center', letterSpacing: 1 },
+  timerNum         : { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold, lineHeight: 20 },
+  timerSec         : { fontSize: 9, fontWeight: FONT_WEIGHT.semibold, lineHeight: 10 },
+  livenessLabel    : { fontSize: FONT_SIZE.xs - 1, color: COLORS.textTertiary, textAlign: 'center', letterSpacing: TRACKING.caps },
 
   scanningOverlay  : { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  scanLine         : { position: 'absolute', width: 220, height: 2, backgroundColor: '#f59e0b', opacity: 0.8 },
-  scanStatusCard   : { backgroundColor: 'rgba(2,8,23,0.9)', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 10, marginTop: 16, borderWidth: 1, borderColor: '#1e293b' },
-  scanStatusText   : { color: '#f59e0b', fontSize: 14, fontWeight: '600' },
+  scanSpinner      : { marginTop: 24 },
+  scanStatusCard   : { backgroundColor: COLORS.overlay, borderRadius: RADIUS.buttonSm, paddingHorizontal: 20, paddingVertical: 10, marginTop: 16, borderWidth: 1, borderColor: COLORS.border },
+  scanStatusText   : { color: COLORS.warning, fontSize: FONT_SIZE.base, fontWeight: FONT_WEIGHT.semibold },
 
-  center           : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
-  permIcon         : { fontSize: 56 },
-  permTitle        : { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
-  permSub          : { fontSize: 13, color: '#475569', textAlign: 'center' },
-  permBtn          : { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 },
-  permBtnText      : { color: '#fff', fontWeight: '700', fontSize: 15 },
+  center           : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
+  permIcon         : { fontSize: 52 },
+  permTitle        : { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  permSub          : { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, textAlign: 'center' },
+  permBtn          : { marginTop: 8 },
 
-  resultContainer  : { flex: 1, backgroundColor: '#020817', alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
-  orb1             : { position: 'absolute', top: -40, left: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#1e40af', opacity: 0.1 },
-  orb2             : { position: 'absolute', bottom: -40, right: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: '#6d28d9', opacity: 0.08 },
-  resultCard            : { width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', gap: 12 },
-  confetti              : { fontSize: 28, letterSpacing: 8, marginBottom: -4 },
-  resultIcon            : { fontSize: 64, marginBottom: 4 },
-  resultTitle           : { fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  successPhoto          : { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: '#4ade80' },
-  successAvatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center', justifyContent: 'center' },
-  workerName            : { fontSize: 28, fontWeight: '900', color: '#f8fafc', textAlign: 'center' },
+  resultContainer  : { flex: 1, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center', padding: SPACING.screen, gap: 12 },
+  resultAnimWrap   : { width: '100%' },
+  resultCard            : { width: '100%', borderRadius: RADIUS.card, padding: SPACING.section, borderWidth: 1, alignItems: 'center', gap: 12 },
+  resultIcon            : { fontSize: 60, marginBottom: 4 },
+  resultTitle           : { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, textAlign: 'center' },
+  successPhoto          : { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: COLORS.success },
+  successAvatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
+  successAvatarText     : { fontSize: 48 },
+  workerName            : { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary, textAlign: 'center' },
   simContainer          : { width: '100%', gap: 6 },
-  simLabel              : { color: '#64748b', fontSize: 12, textAlign: 'center', letterSpacing: 0.5 },
-  simBar                : { height: 8, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden' },
-  simFill               : { height: '100%', borderRadius: 4 },
-  simValue              : { fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  successPill           : { backgroundColor: 'rgba(74,222,128,0.12)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(74,222,128,0.3)' },
-  successPillText       : { color: '#4ade80', fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
-  errorDetailText       : { color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
-  tipsBox               : { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 14, gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  tipsTitle             : { color: '#64748b', fontSize: 12, fontWeight: '700', marginBottom: 4, letterSpacing: 0.5 },
-  tipItem               : { color: '#475569', fontSize: 12, lineHeight: 18 },
-  retryBtnInner         : { borderRadius: 14, padding: 14, alignItems: 'center', backgroundColor: '#2563eb' },
-  retryBtn              : { width: '100%', backgroundColor: '#2563eb', borderRadius: 16, padding: 16, alignItems: 'center' },
-  retryBtnText          : { color: '#fff', fontWeight: '700', fontSize: 16 },
-  homeBtn          : { width: '100%', backgroundColor: '#0f172a', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b' },
-  homeBtnText      : { color: '#94a3b8', fontWeight: '600', fontSize: 15 },
+  simLabel              : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs, textAlign: 'center', letterSpacing: TRACKING.label },
+  simBar                : { height: 8, backgroundColor: COLORS.surfaceElevated, borderRadius: 4, overflow: 'hidden' },
+  simFill               : { height: '100%', borderRadius: 4, backgroundColor: COLORS.success },
+  simValue              : { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, textAlign: 'center' },
+  successPill           : { backgroundColor: COLORS.successGlow, borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: COLORS.successBorder },
+  successPillText       : { color: COLORS.success, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.semibold, letterSpacing: TRACKING.label },
+  errorDetailText       : { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, textAlign: 'center', lineHeight: 20 },
+  tipsBox               : { width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: RADIUS.buttonSm, padding: 14, gap: 6, borderWidth: 1, borderColor: COLORS.border },
+  tipsTitle             : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs, fontWeight: FONT_WEIGHT.bold, marginBottom: 4, letterSpacing: TRACKING.label },
+  tipItem               : { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs, lineHeight: 18 },
+  retryBtnInline        : { marginTop: 4 },
+  actionSpacing         : {},
 });

@@ -1,29 +1,15 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  Alert, Image, TextInput, Animated,
+  Alert, Image, TextInput, Animated, ScrollView,
 } from 'react-native';
-
-function SlideCard({ index, children }: { index: number; children: React.ReactNode }) {
-  const opacity    = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(new Animated.Value(-24)).current;
-  useEffect(() => {
-    const delay = Math.min(index, 7) * 60;
-    Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 350, delay, useNativeDriver: true }),
-      Animated.timing(translateX, { toValue: 0, duration: 350, delay, useNativeDriver: true }),
-    ]).start();
-  }, []);
-  return (
-    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
-      {children}
-    </Animated.View>
-  );
-}
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllWorkers, getTodayPresentWorkerIds, deleteWorker, Worker } from '../services/DatabaseService';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
+import Card from '../components/Card';
+import Button from '../components/Button';
 
-const COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+const ACCENTS = [COLORS.primary, COLORS.success, COLORS.warning, '#8B5CF6', '#06B6D4', '#EC4899'];
 type FilterType = 'all' | 'present' | 'absent';
 
 const FILTERS: { key: FilterType; label: string }[] = [
@@ -32,11 +18,28 @@ const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'absent',  label: 'Absent Today' },
 ];
 
+function FadeInRow({ index, children }: { index: number; children: React.ReactNode }) {
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(-16)).current;
+  useEffect(() => {
+    const delay = Math.min(index, 8) * 45;
+    Animated.parallel([
+      Animated.timing(opacity,    { toValue: 1, duration: 300, delay, useNativeDriver: true }),
+      Animated.timing(translateX, { toValue: 0, duration: 300, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function WorkerListScreen({ navigation }: any) {
-  const [workers, setWorkers]               = useState<Worker[]>([]);
+  const [workers, setWorkers]                 = useState<Worker[]>([]);
   const [todayPresentIds, setTodayPresentIds] = useState<Set<string>>(new Set());
-  const [searchText, setSearchText]         = useState('');
-  const [activeFilter, setActiveFilter]     = useState<FilterType>('all');
+  const [searchText, setSearchText]           = useState('');
+  const [activeFilter, setActiveFilter]       = useState<FilterType>('all');
 
   useFocusEffect(useCallback(() => {
     Promise.all([getAllWorkers(), getTodayPresentWorkerIds()])
@@ -67,14 +70,12 @@ export default function WorkerListScreen({ navigation }: any) {
     ]);
   };
 
-  const getColor = (name: string) => COLORS[name.charCodeAt(0) % COLORS.length];
+  const getAccent = (name: string) => ACCENTS[name.charCodeAt(0) % ACCENTS.length];
 
   return (
     <View style={styles.container}>
-      <View style={styles.orb} />
-
       {/* Header stats */}
-      <View style={styles.statsBar}>
+      <Card style={styles.statsBar}>
         <View style={styles.statItem}>
           <Text style={styles.statNum}>{workers.length}</Text>
           <Text style={styles.statLbl}>Registered</Text>
@@ -85,10 +86,8 @@ export default function WorkerListScreen({ navigation }: any) {
           <Text style={styles.statLbl}>Present Today</Text>
         </View>
         <View style={styles.statDivider} />
-        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('Enroll')}>
-          <Text style={styles.addBtnText}>+ Add Worker</Text>
-        </TouchableOpacity>
-      </View>
+        <Button label="+ Add" onPress={() => navigation.navigate('Enroll')} variant="secondary" style={styles.addBtn} />
+      </Card>
 
       {/* Search bar */}
       <View style={styles.searchContainer}>
@@ -96,7 +95,7 @@ export default function WorkerListScreen({ navigation }: any) {
         <TextInput
           style={styles.searchInput}
           placeholder="Search workers by name or ID..."
-          placeholderTextColor="#475569"
+          placeholderTextColor={COLORS.textSecondary}
           value={searchText}
           onChangeText={setSearchText}
           autoCapitalize="none"
@@ -109,22 +108,23 @@ export default function WorkerListScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Filter chips + count */}
+      {/* Filter chips */}
       <View style={styles.filtersRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f.key}
-            style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
-            onPress={() => setActiveFilter(f.key)}
-          >
-            <Text style={[styles.filterChipText, activeFilter === f.key && styles.filterChipTextActive]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        <Text style={styles.countText}>
-          {filteredWorkers.length}/{workers.length}
-        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
+          {FILTERS.map(f => (
+            <TouchableOpacity
+              key={f.key}
+              style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
+              onPress={() => setActiveFilter(f.key)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.filterChipText, activeFilter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <Text style={styles.countText}>{filteredWorkers.length}/{workers.length}</Text>
       </View>
 
       {workers.length === 0 ? (
@@ -134,9 +134,7 @@ export default function WorkerListScreen({ navigation }: any) {
           </View>
           <Text style={styles.emptyTitle}>No Workers Registered</Text>
           <Text style={styles.emptySub}>Register your first field worker to get started</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate('Enroll')}>
-            <Text style={styles.emptyBtnText}>Register First Worker</Text>
-          </TouchableOpacity>
+          <Button label="Register First Worker" onPress={() => navigation.navigate('Enroll')} style={styles.emptyBtn} />
         </View>
       ) : filteredWorkers.length === 0 ? (
         <View style={styles.empty}>
@@ -150,59 +148,45 @@ export default function WorkerListScreen({ navigation }: any) {
         <FlatList
           data={filteredWorkers}
           keyExtractor={w => w.id}
-          contentContainerStyle={{ padding: 16, gap: 10 }}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => {
-            const color = getColor(item.name);
+            const accent = getAccent(item.name);
             const isPresent = todayPresentIds.has(item.id);
             return (
-              <SlideCard index={index}>
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.cardAccent, { backgroundColor: color }]} />
-
-                {item.photoUri ? (
-                  <Image source={{ uri: item.photoUri }} style={styles.photoAvatar} />
-                ) : (
-                  <View style={[styles.avatar, { backgroundColor: `${color}20`, borderColor: `${color}40` }]}>
-                    <Text style={[styles.avatarText, { color }]}>{item.name[0].toUpperCase()}</Text>
-                  </View>
-                )}
-
-                <View style={styles.cardInfo}>
-                  <Text style={styles.workerName}>{item.name}</Text>
-                  <View style={styles.idRow}>
-                    <View style={styles.idBadge}>
-                      <Text style={styles.idText}>{item.employeeId}</Text>
-                    </View>
-                    {isPresent ? (
-                      <View style={styles.presentBadge}>
-                        <Text style={styles.presentText}>● Present</Text>
-                      </View>
+              <FadeInRow index={index}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('WorkerDetail', { worker: item })}
+                  onLongPress={() => handleDelete(item)}
+                  activeOpacity={0.75}
+                >
+                  <Card accentColor={accent} style={styles.card}>
+                    {item.photoUri ? (
+                      <Image source={{ uri: item.photoUri }} style={styles.photoAvatar} />
                     ) : (
-                      <View style={styles.absentBadge}>
-                        <Text style={styles.absentText}>○ Absent</Text>
+                      <View style={[styles.avatar, { backgroundColor: `${accent}22`, borderColor: `${accent}55` }]}>
+                        <Text style={[styles.avatarText, { color: accent }]}>{item.name[0].toUpperCase()}</Text>
                       </View>
                     )}
-                  </View>
-                  <Text style={styles.enrollDate}>
-                    Enrolled {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </Text>
-                </View>
 
-                <View style={styles.cardActions}>
-                  <View style={styles.indexBadge}>
-                    <Text style={styles.indexText}>#{index + 1}</Text>
-                  </View>
-                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)}>
-                    <Text style={styles.deleteBtnText}>🗑</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-              </SlideCard>
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.workerName}>{item.name}</Text>
+                      <View style={styles.idBadge}>
+                        <Text style={styles.idText}>{item.employeeId}</Text>
+                      </View>
+                      <Text style={styles.enrollDate}>
+                        Enrolled {new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.statusBadge, isPresent ? styles.statusBadgePresent : styles.statusBadgeAbsent]}>
+                      <Text style={[styles.statusText, { color: isPresent ? COLORS.success : COLORS.textSecondary }]}>
+                        {isPresent ? '● Present' : '○ Absent'}
+                      </Text>
+                    </View>
+                  </Card>
+                </TouchableOpacity>
+              </FadeInRow>
             );
           }}
         />
@@ -212,51 +196,58 @@ export default function WorkerListScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container         : { flex: 1, backgroundColor: '#020817' },
-  orb               : { position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#6d28d9', opacity: 0.08 },
-  statsBar          : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', margin: 16, marginBottom: 10, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#1e293b' },
-  statItem          : { flex: 1, alignItems: 'center' },
-  statNum           : { fontSize: 24, fontWeight: '800', color: '#f8fafc' },
-  statLbl           : { fontSize: 11, color: '#475569', marginTop: 2 },
-  statDivider       : { width: 1, height: 40, backgroundColor: '#1e293b' },
-  addBtn            : { flex: 1, alignItems: 'center', backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: 10, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)' },
-  addBtnText        : { color: '#60a5fa', fontSize: 13, fontWeight: '700' },
-  searchContainer   : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: '#1e293b', paddingHorizontal: 14, height: 46 },
-  searchIcon        : { fontSize: 14, marginRight: 8 },
-  searchInput       : { flex: 1, color: '#f1f5f9', fontSize: 14 },
-  clearBtn          : { padding: 6 },
-  clearBtnText      : { color: '#475569', fontSize: 13, fontWeight: '700' },
-  filtersRow        : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 4, gap: 8 },
-  filterChip        : { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#1e293b' },
-  filterChipActive  : { backgroundColor: 'rgba(59,130,246,0.15)', borderColor: '#3b82f6' },
-  filterChipText    : { fontSize: 12, color: '#475569', fontWeight: '600' },
-  filterChipTextActive: { color: '#60a5fa' },
-  countText         : { marginLeft: 'auto', fontSize: 11, color: '#334155', fontWeight: '600' },
-  empty             : { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
-  emptyIconBg       : { width: 96, height: 96, borderRadius: 48, backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#1e293b', alignItems: 'center', justifyContent: 'center' },
-  emptyIcon         : { fontSize: 40 },
-  emptyTitle        : { fontSize: 20, fontWeight: '700', color: '#94a3b8' },
-  emptySub          : { fontSize: 13, color: '#475569', textAlign: 'center' },
-  emptyBtn          : { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  emptyBtnText      : { color: '#fff', fontWeight: '700', fontSize: 14 },
-  card              : { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#1e293b', overflow: 'hidden' },
-  cardAccent        : { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
-  avatar            : { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 14, marginLeft: 8 },
-  photoAvatar       : { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#3b82f6', marginRight: 14, marginLeft: 8 },
-  avatarText        : { fontSize: 20, fontWeight: '800' },
-  cardInfo          : { flex: 1, gap: 4 },
-  workerName        : { fontSize: 16, fontWeight: '700', color: '#f1f5f9' },
-  idRow             : { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  idBadge           : { backgroundColor: '#1e293b', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  idText            : { fontSize: 11, color: '#64748b', fontWeight: '600', letterSpacing: 0.5 },
-  presentBadge      : { backgroundColor: 'rgba(16,185,129,0.12)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: 'rgba(16,185,129,0.3)' },
-  presentText       : { fontSize: 10, color: '#10b981', fontWeight: '700' },
-  absentBadge       : { backgroundColor: 'rgba(100,116,139,0.1)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: 'rgba(100,116,139,0.25)' },
-  absentText        : { fontSize: 10, color: '#64748b', fontWeight: '600' },
-  enrollDate        : { fontSize: 11, color: '#334155' },
-  cardActions       : { alignItems: 'flex-end', gap: 10 },
-  indexBadge        : { backgroundColor: '#1e293b', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  indexText         : { color: '#475569', fontSize: 10, fontWeight: '600' },
-  deleteBtn         : { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.1)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)', alignItems: 'center', justifyContent: 'center' },
-  deleteBtnText     : { fontSize: 14 },
+  container : { flex: 1, backgroundColor: COLORS.background },
+
+  statsBar    : { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.screen, marginTop: SPACING.screen, marginBottom: SPACING.card },
+  statItem    : { flex: 1, alignItems: 'center' },
+  statNum     : { fontSize: FONT_SIZE.xl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  statLbl     : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
+  statDivider : { width: 1, height: 36, backgroundColor: COLORS.border, marginHorizontal: 8 },
+  addBtn      : { flex: 1, width: undefined },
+
+  searchContainer : {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.screen,
+    marginBottom: SPACING.card,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: 16, height: 48,
+  },
+  searchIcon  : { fontSize: 14, marginRight: 10, color: COLORS.textSecondary },
+  searchInput : { flex: 1, color: COLORS.textPrimary, fontSize: FONT_SIZE.sm },
+  clearBtn    : { padding: 6 },
+  clearBtnText: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+
+  filtersRow    : { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.screen, marginBottom: SPACING.card },
+  filtersScroll : { gap: 8, flexGrow: 1 },
+  filterChip    : { paddingHorizontal: 14, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  filterChipActive : { backgroundColor: COLORS.primaryGlow, borderColor: COLORS.primaryBorder },
+  filterChipText   : { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold },
+  filterChipTextActive: { color: COLORS.primary },
+  countText  : { marginLeft: 10, fontSize: FONT_SIZE.xs, color: COLORS.textTertiary, fontWeight: FONT_WEIGHT.medium },
+
+  empty       : { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
+  emptyIconBg : { width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  emptyIcon   : { fontSize: 40 },
+  emptyTitle  : { fontSize: FONT_SIZE.lg, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  emptySub    : { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, textAlign: 'center' },
+  emptyBtn    : { width: '80%' },
+
+  listContent : { paddingHorizontal: SPACING.screen, paddingBottom: 24, gap: SPACING.card },
+
+  card       : { flexDirection: 'row', alignItems: 'center' },
+  avatar     : { width: 48, height: 48, borderRadius: 24, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  photoAvatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: COLORS.primary, marginRight: 14 },
+  avatarText : { fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold },
+  cardInfo   : { flex: 1, gap: 4 },
+  workerName : { fontSize: FONT_SIZE.base, fontWeight: FONT_WEIGHT.semibold, color: COLORS.textPrimary },
+  idBadge    : { alignSelf: 'flex-start', backgroundColor: COLORS.surfaceElevated, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  idText     : { fontSize: FONT_SIZE.xs - 1, color: COLORS.textSecondary, fontWeight: FONT_WEIGHT.semibold, letterSpacing: TRACKING.label },
+  enrollDate : { fontSize: FONT_SIZE.xs - 1, color: COLORS.textTertiary },
+
+  statusBadge        : { position: 'absolute', top: 14, right: 14, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
+  statusBadgePresent : { backgroundColor: COLORS.successGlow, borderColor: COLORS.successBorder },
+  statusBadgeAbsent  : { backgroundColor: 'rgba(100,116,139,0.1)', borderColor: COLORS.border },
+  statusText         : { fontSize: 10, fontWeight: FONT_WEIGHT.bold },
 });

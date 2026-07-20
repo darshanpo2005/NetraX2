@@ -12,25 +12,26 @@ import WorkerDetailScreen from './src/screens/WorkerDetailScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import AttendanceReportScreen from './src/screens/AttendanceReportScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
+import { COLORS } from './src/theme';
 
 const Stack = createStackNavigator();
 
 export default function App() {
   return (
     <NavigationContainer>
-      <StatusBar barStyle="light-content" backgroundColor="#020817" />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <Stack.Navigator
         initialRouteName="Splash"
         screenOptions={{
-          headerStyle: { backgroundColor: '#020817', elevation: 0, shadowOpacity: 0 },
-          headerTintColor: '#60a5fa',
-          headerTitleStyle: { fontWeight: '800', fontSize: 18, letterSpacing: 0.5 },
-          cardStyle: { backgroundColor: '#020817' },
+          headerStyle: { backgroundColor: COLORS.background, elevation: 0, shadowOpacity: 0, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+          headerTintColor: COLORS.primary,
+          headerTitleStyle: { fontWeight: '700', fontSize: 17, letterSpacing: 0.5, color: COLORS.textPrimary },
+          cardStyle: { backgroundColor: COLORS.background },
         }}
       >
         <Stack.Screen name="Splash"      component={SplashScreen}     options={{ headerShown: false }} />
         <Stack.Screen name="Login"       component={LoginScreen}      options={{ headerShown: false }} />
-        <Stack.Screen name="Home"        component={HomeScreen}       options={{ title: 'NetraX 2.0', headerLeft: () => null }} />
+        <Stack.Screen name="Home"        component={HomeScreen}       options={{ headerShown: false }} />
         <Stack.Screen name="Enroll"      component={EnrollScreen}     options={{ title: 'Register Worker' }} />
         <Stack.Screen name="Attendance"  component={AttendanceScreen} options={{ title: 'Face Authentication' }} />
         <Stack.Screen name="WorkerList"   component={WorkerListScreen}   options={{ title: 'Workforce' }} />
