@@ -28,7 +28,9 @@ const syncWorkersBackup = async () => {
       id: w.id,
       name: w.name,
       employee_id: w.employeeId,
-      enrolled_at: new Date(w.createdAt).toISOString(),
+      enrolled_at: typeof w.createdAt === 'string'
+        ? new Date(w.createdAt).getTime()
+        : Number(w.createdAt),
       device_id: DEVICE_ID,
     }));
 
@@ -57,7 +59,9 @@ export const syncAndPurge = async (): Promise<{
           worker_id: l.workerId,
           worker_name: l.workerName,
           employee_id: l.employeeId,
-          timestamp: d.toISOString(),
+          timestamp: typeof l.timestamp === 'string'
+            ? new Date(l.timestamp).getTime()
+            : Number(l.timestamp),
           date: d.toISOString().slice(0, 10),
           time: d.toISOString().slice(11, 19),
           similarity: l.similarity,
