@@ -1,18 +1,20 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, StyleSheet,
-  Animated, Vibration, Keyboard,
+  Animated, Vibration, Keyboard, StatusBar,
 } from 'react-native';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, TRACKING, RADIUS, SPACING } from '../theme';
 import Button from '../components/Button';
 
 const ADMIN_PIN = '1234';
 const PIN_LENGTH = 4;
+const TOP_INSET = StatusBar.currentHeight || 44;
 
 export default function LoginScreen({ navigation }: any) {
   const [pin, setPin]         = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(false);
+  const [focused, setFocused] = useState(false);
   const shakeAnim             = useRef(new Animated.Value(0)).current;
   const inputRef              = useRef<TextInput>(null);
 
@@ -50,6 +52,8 @@ export default function LoginScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#080C14" />
+
       <View style={styles.logoSection}>
         <View style={styles.logoGlow} />
         <View style={styles.logoCircle}>
@@ -69,20 +73,24 @@ export default function LoginScreen({ navigation }: any) {
           onPress={() => inputRef.current?.focus()}
         >
           <Animated.View style={[styles.pinRow, { transform: [{ translateX: shakeAnim }] }]}>
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.pinBox,
-                  i < pin.length && styles.pinBoxFilled,
-                  error && styles.pinBoxError,
-                ]}
-              >
-                {i < pin.length ? (
-                  <View style={[styles.pinDot, error && styles.pinDotError]} />
-                ) : null}
-              </View>
-            ))}
+            {Array.from({ length: PIN_LENGTH }).map((_, i) => {
+              const isActive = focused && i === pin.length;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.pinBox,
+                    i < pin.length && styles.pinBoxFilled,
+                    isActive && styles.pinBoxActive,
+                    error && styles.pinBoxError,
+                  ]}
+                >
+                  {i < pin.length ? (
+                    <View style={[styles.pinDot, error && styles.pinDotError]} />
+                  ) : null}
+                </View>
+              );
+            })}
           </Animated.View>
         </TouchableOpacity>
 
@@ -91,10 +99,13 @@ export default function LoginScreen({ navigation }: any) {
           style={styles.hiddenInput}
           value={pin}
           onChangeText={handleChangePin}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           keyboardType="number-pad"
           maxLength={PIN_LENGTH}
           autoFocus
           secureTextEntry
+          cursorColor="#2563EB"
         />
 
         {error ? <Text style={styles.errorText}>Incorrect PIN — try again</Text> : null}
@@ -122,7 +133,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 64,
+    paddingTop: 64 + TOP_INSET,
+    paddingBottom: 64,
     paddingHorizontal: SPACING.screen,
   },
 
@@ -204,6 +216,10 @@ const styles = StyleSheet.create({
   pinBoxFilled: {
     backgroundColor: COLORS.primaryGlow,
     borderColor: COLORS.primaryBorder,
+  },
+  pinBoxActive: {
+    borderColor: '#2563EB',
+    backgroundColor: 'rgba(37,99,235,0.1)',
   },
   pinBoxError: {
     backgroundColor: COLORS.errorGlow,
